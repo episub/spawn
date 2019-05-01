@@ -1,0 +1,396 @@
+---
+name: User Authentication
+---
+
+# Authentiction
+
+This project provides one way of handling user authentication and sessions, but it is optional.  If you wish to use it, here is an example of how to set up a project using the authentication provided.  This example assumes you're working from a project based on the quickstart, or a reasonably fresh project.
+
+## Modify Database
+
+First, let's create a table for our user account and to hold sessions.  Modify migrations/001-base.sql to be the following:
+
+```
+CREATE EXTENSION pgcrypto;
+
+CREATE TABLE "user" (
+	user_id serial PRIMARY KEY,
+	username VARCHAR(64) UNIQUE NOT NULL,
+	password bytea NOT NULL,
+	admin BOOLEAN NOT NULL DEFAULT false,
+	created_at timestamptz NOT NULL DEFAULT Now(),
+	updated_at timestamptz NOT NULL DEFAULT Now()
+);
+
+CREATE TABLE "session" (
+	session_id uuid NOT NULL DEFAULT gen_random_uuid(),
+	expires timestamptz NOT NULL,
+	user_id_user uuid NOT NULL,
+	created_at timestamptz NOT NULL DEFAULT Now(),
+	updated_at timestamptz NOT NULL DEFAULT Now(),
+	CONSTRAINT session_pk PRIMARY KEY (session_id)
+);
+
+CREATE TABLE todo (
+ todo_id serial PRIMARY KEY,
+ content VARCHAR NOT NULL,
+ done BOOLEAN NOT NULL DEFAULT false,
+ user_id INTEGER NOT NULL,
+ FOREIGN KEY (user_id) REFERENCES "user" (user_id)
+);
+
+INSERT INTO "user" (user_id, username, password, admin) VALUES 
+(1, 'matthew', '$2a$12$ekk6GLEiBgqYeG6AQji.5eD9lyVn5DVooN5EgFdk8I/7iC7AEsnaG', true),
+(2, 'george', '$2a$12$ekk6GLEiBgqYeG6AQji.5eD9lyVn5DVooN5EgFdk8I/7iC7AEsnaG', false);
+
+INSERT INTO todo (content, done, user_id) VALUES
+('Buy milk', false, 1),
+('Update documentation', false, 1),
+('Fix roof', true, 1),
+('Play games', true, 2),
+('Rest', true, 2),
+('Relax', true, 2),
+('High five myself', false, 2);
+```
+
+We don't have a salt column because we are going to use bcrypt which includes a salt as part of the hashed password we save.
+
+Update `gqlgen.yml`:
+
+```
+schema:
+- schema.graphql
+exec:
+  filename: graph/generated.go
+  package: graph
+model:
+  filename: models/models_gen.go
+  package: models
+resolver:
+  filename: resolvers/resolver.go
+  package: resolvers
+  type: Resolver
+models:
+  Session:
+    model: github.com/example/todo/gnorm/public/session.Row
+  Todo:
+    model: github.com/example/todo/gnorm/public/todo.Row
+  User:
+    model: github.com/example/todo/gnorm/public/user.Row
+```
+
+Update `config.yaml`:
+
+```
+packageName: "github.com/example/todo"
+generate:
+  schemaName: "public"
+  postgres:
+  - modelName: "Todo"
+    modelStruct: "todo.Row"
+    modelPackage: "github.com/example/todo/models"
+    postgresName: "Todo"
+    primaryKey: "TodoID"
+    primaryKeyType: "int"
+  - modelName: "Session"
+    modelStruct: "session.Row"
+    modelPackage: "github.com/example/todo/models"
+    postgresName: "Session"
+    primaryKey: "SessionID"
+    primaryKeyType: "uuid.UUID"
+  - modelName: "User"
+    modelStruct: "user.Row"
+    modelPackage: "github.com/example/todo/models"
+    postgresName: "User"
+    primaryKey: "UserID"
+    primaryKeyType: "int"
+  resolvers:
+  - singularName: "Todo"
+    pluralName: "Todos"
+    primaryKey: "TodoID" # Defaults to 'ID'
+    primaryKeyType: "int" # Defaults to 'string'
+    query: true
+```
+
+Create new functions in `auth.go`:
+
+* authenticateUser
+* createSession
+* getSession
+
+```
+package main
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
+	sq "github.com/Masterminds/squirrel"
+	"github.com/episub/spawn/middleware"
+	"github.com/episub/spawn/security"
+	"github.com/example/todo/gnorm/public/session"
+	"github.com/example/todo/gnorm/public/user"
+	"github.com/example/todo/loader"
+	"github.com/gofrs/uuid"
+)
+
+// Session Auth session
+type Session struct {
+	session.Row
+}
+
+// GetID Returns Session ID
+func (s Session) GetID() string {
+	return s.SessionID.String()
+}
+
+// GetExpiry Returns session expiry
+func (s Session) GetExpiry() time.Time {
+	return s.Expires
+}
+
+// GetUser Returns user this session is for
+func (s Session) GetUser(ctx context.Context) (middleware.User, error) {
+	user, err := loader.Loader.GetUser(ctx, s.UserID)
+	return User{Row: user}, err
+}
+
+// Destroy Destroys this session
+func (s Session) Destroy(ctx context.Context) error {
+	_, err := loader.Loader.DeleteSession(ctx, s.SessionID.String())
+
+	return err
+}
+
+// User Auth session
+type User struct {
+	user.Row
+}
+
+// GetID Returns User ID.
+func (u User) GetID() string {
+	return fmt.Sprintf("%d", u.UserID)
+}
+
+// GetInactive Returns inactive status
+func (u User) GetInactive() bool {
+	return false
+}
+
+// authenticateUser Checks whether a login with username and password is
+// permitted
+func authenticateUser(ctx context.Context, username string, password string) (middleware.User, error) {
+	if len(username) == 0 || len(password) == 0 {
+		return User{}, fmt.Errorf("Must provide both username and password")
+	}
+
+	// Usernames should be stored in database in lower case so that we don't
+	// differentiate between coolcat and CoolCat
+	username = strings.ToLower(username)
+
+	user, err := loader.Loader.OneUser(ctx, []sq.Sqlizer{sq.Eq{user.UsernameCol: username}}, nil)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return User{Row: user}, security.AuthenticateUser(ctx, []byte{}, []byte(user.Password), []byte(password))
+}
+
+// createSession Creates a new session for user
+func createSession(ctx context.Context, user middleware.User) (sessionID string, expiry time.Time, err error) {
+	uid, _ := strconv.Atoi(user.GetID())
+
+	expiry = time.Now().Add(time.Hour * 7 * 24)
+
+	var sessionUUID uuid.UUID
+	sessionUUID, err = loader.Loader.CreateSession(ctx, uid, expiry)
+
+	sessionID = sessionUUID.String()
+
+	return
+}
+
+// getSession Fetches session with the given id
+func getSession(ctx context.Context, id string) (middleware.Session, error) {
+	sessionUUID, err := uuid.FromString(id)
+	if err != nil {
+		return nil, err
+	}
+
+	session, err := loader.Loader.GetSession(ctx, sessionUUID)
+
+	return Session{Row: session}, err
+}
+```
+
+Create `loader/session.go`:
+
+```
+package loader
+
+import (
+	"context"
+	"time"
+
+	sq "github.com/Masterminds/squirrel"
+	"github.com/example/todo/gnorm/public/session"
+	"github.com/gofrs/uuid"
+)
+
+// CreateSession Creates a new session
+func (l *PostgresLoader) CreateSession(ctx context.Context, userID int, expiry time.Time) (uuid.UUID, error) {
+	var err error
+	var i session.Row
+	i.Expires = expiry
+	i.UserID = userID
+
+	i, err = session.Upsert(ctx, l.pool, i)
+
+	return i.SessionID, err
+}
+
+// DeleteSession Marks a session as expired as of now
+func (l *PostgresLoader) DeleteSession(ctx context.Context, sessionID string) (bool, error) {
+	_, err := session.Update(
+		ctx,
+		l.pool,
+		map[string]interface{}{"expires": time.Now()},
+		[]sq.Sqlizer{sq.Eq{session.SessionIDCol: sessionID}},
+	)
+
+	return (err == nil), sanitiseError(err)
+}
+
+func hydrateModelSession(ctx context.Context, i session.Row) (o session.Row) {
+	return i
+}
+```
+
+Update `server.go` with:
+
+* Auth object
+* Import
+* Create auth
+* routes for things
+
+```
+var auth em.Auth
+
+func main() {
+	...
+	auth = em.NewAuth(
+		"TestCookieName",
+		authenticateUser,
+		createSession,
+		getSession,
+		cfg.Debug,
+	)
+	...
+}
+
+func startRouters(tracer opentracing.Tracer) {
+	...
+	externalRouter := newRouter(tracer)
+	externalRouter.Use(em.DefaultMW)
+	externalRouter.Get("/authenticate", auth.AuthenticationHandler)
+	externalRouter.Get("/logout", auth.LogoutHandler)
+	externalRouter.Handle("/", handler.Playground("GraphQL playground", "/query"))
+	externalRouter.Route("/query", func(r chi.Router) {
+		r.Use(middleware.Timeout(60 * time.Second))
+		r.Use(auth.SessionMW)
+		r.Use(auth.EnforceAuthenticationMW)
+		r.Handle("/", handler.GraphQL(
+			api.NewExecutableSchema(graphqlConfig()),
+			handler.RequestMiddleware(requestMiddleware()),
+		))
+	})
+	...
+}
+```
+
+resolvers/resolver.go:
+
+```
+package resolvers
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/example/todo/gnorm/public/todo"
+	"github.com/example/todo/gnorm/public/user"
+	"github.com/example/todo/graph"
+	"github.com/example/todo/loader"
+	"github.com/example/todo/models"
+)
+
+type Resolver struct{}
+
+func (r *Resolver) Mutation() graph.MutationResolver {
+	return &mutationResolver{r}
+}
+func (r *Resolver) Query() graph.QueryResolver {
+	return &queryResolver{r}
+}
+
+type mutationResolver struct{ *Resolver }
+
+func (r *mutationResolver) CreateTodo(ctx context.Context, input models.NewTodo) (*todo.Row, error) {
+	panic("not implemented")
+}
+
+type queryResolver struct{ *Resolver }
+
+func (r *queryResolver) Todos(ctx context.Context) ([]todo.Row, error) {
+	all, _, _, err := loader.Loader.GetAllTodo(ctx, models.Filter{})
+	return all, err
+}
+
+func (r *Resolver) Todo() graph.TodoResolver {
+	return &todoResolver{r}
+}
+
+type todoResolver struct{ *Resolver }
+type userResolver struct{ *Resolver }
+
+func (t *todoResolver) User(ctx context.Context, obj *todo.Row) (*user.Row, error) {
+	user, err := loader.Loader.GetUser(ctx, obj.UserID)
+	return &user, err
+}
+
+func (t *todoResolver) ID(ctx context.Context, obj *todo.Row) (string, error) {
+	return fmt.Sprintf("%d", obj.TodoID), nil
+}
+
+func (r *Resolver) User() graph.UserResolver {
+	return &userResolver{r}
+}
+
+func (u *userResolver) ID(ctx context.Context, obj *user.Row) (string, error) {
+	return fmt.Sprintf("%d", obj.UserID), nil
+}
+```
+
+Run server with:
+
+```
+DEBUG=true DB_USER=spawn DB_PASS=spawn go run *go
+```
+
+To ensure that the cookie will set while we're testing and not on SSL.
+
+Try a query without logging in, and should fail.  Then, log in by visiting this URL in a different browser tab and try again:
+
+```
+http://localhost:8080/authenticate?username=matthew&password=1234
+```
+
+Then try logging out and try query again:
+
+```
+http://localhost:8080/logout
+```

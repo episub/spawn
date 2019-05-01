@@ -1,0 +1,479 @@
+---
+name: Quick Start
+---
+
+# Quick Start
+
+spawn is used to initialise and manage a project for Episub's stack.  For now, this involves the setting up of a repository to handle the server side of things.
+
+This framework makes use of these projects (among others) to auto-generate some key code and provide some key functionality:
+
+* [Gnorm](https://gnorm.org/) for database inspection and code generation
+* [gqlgen](https://github.com/99designs/gqlgen) for GraphQL code generation
+* [Open Policy Agent](https://www.openpolicyagent.org/) for permissions
+
+This framework is designed to allow you to use as much or as little as you want.  We provide tools that generate useful functions for you, but you can easily turn that code off if you want and use your own custom code.
+
+## Initialise Project
+
+This project relies on using Go modules, so you will need Go 1.11 or higher installed, and use a folder outside of $GOPATH.  Initialisation should be run only once.  It will set up a new project with fresh configs.  Create a folder for your new repository, and initialise your modules file:
+
+```
+go mod init github.com/example/todo
+```
+
+Now we're ready to generate our project (optionally specify --folder={folder}):
+
+```
+go run github.com/episub/spawn init
+```
+
+Your base project is now ready, including a sample SQL file for PostgreSQL in the migrations folder, and a schema for GraphQL in schema.graphql.  Let's use the base project.  The key to the Episub stack is auto generated code.  When changes are made to key files, we must re-generate our code.
+
+Before we can do this, we need the database running so that we can connect to the database and create the relevant DB code:
+
+```
+docker-compose up -d
+```
+
+Once the database has booted up, we are ready to generate our code:
+
+```
+go run github.com/episub/spawn generate
+```
+
+This gives us the GraphQL code.  We have one final task: filling out the resolvers code in `resolvers/resolver.go` to tell our server what to return when someone requests all the todos (we'll leave the others for now):
+
+```
+func (r *queryResolver) Todos(ctx context.Context) ([]models.Todo, error) {
+	todos := make([]models.Todo, 3)
+
+	for i, _ := range todos {
+		todos[i] = models.Todo{
+			ID:   fmt.Sprintf("%d", i),
+			Content: fmt.Sprintf("Todo number %d", i),
+		}
+	}
+
+	return todos, nil
+}
+```
+
+That's it.  Now you're ready to run the project:
+
+```
+go run server.go
+```
+
+Connect to the project via http://localhost:8080 and try the following query:
+
+```
+query {
+  todos {
+    id
+    content
+  }
+}
+```
+
+
+Start the server back up again, and try the query again.  You should now see it working!
+
+## Database
+
+This project by default separates database functions (gnorm/dbl folder) from GraphQL models.  The best database designs do not necessarily describe or carve up the world in the way that makes sense for your GraphQL API.  These are separate ways of representing the world, and it may in some cases be useful to keep them separate.  For example, while your database may be fully normalised, you may want the GraphQL to display a de-normalised model.  Furthermore, you may decide one day that you want to switch out your storage solution, and it will help to not have the resolvers tightly coupled to the storage system.  So we prefer to use the 'loader' package to contain functions that don't leak the database to the resolvers, and interact through that.  The job of the 'loader' package is to translate between the GraphQL model of the world and our database's model of the world.
+
+Let's pull our todos from the database rather than hard coding the reply.  Update your config to set it to auto-generate some query related functions.
+
+Update your config.yaml to the following:
+
+```
+packageName: "github.com/example/todo"
+generate:
+  schemaName: "public"
+  postgres:
+  - modelName: "Todo"
+    modelStruct: "todo.Row"
+    modelPackage: "github.com/example/todo/models"
+    postgresName: "Todo"
+    primaryKey: "TodoID"
+    primaryKeyType: "int"
+  - modelName: "User"
+    modelStruct: "models.User"
+    modelPackage: "github.com/example/todo/models"
+    postgresName: "User"
+    primaryKey: "UserID"
+    primaryKeyType: "int"
+```
+
+One of the objects that gets used by our auto-generated scripts is PageInfo, used for pagination.  Let's add this to our schema now so that the model struct gets created for us.  Add the following into your `schema.graphql` file:
+
+```
+type PageInfo {
+	hasNextPage: Boolean!
+	hasPreviousPage: Boolean!
+}
+```
+
+gqlgen allows us to define our own struct to use for Todo instead of the automatically generated one, and that's what we'll do here.  We'll make use of the automatically generated database struct directly to simplify matters.  Update `gqlgen.yml` at the bottom with the following to tell gqlgen that we are going to provide the Todo model ourselves:
+
+```
+models:
+  Todo:
+    model: github.com/example/todo/gnorm/public/todo.Row
+```
+
+Because we're separating the database representation of our data from the GraphQL API, we need to perform the translation between the database's model and our GraphQL model.  In this case, the translation is very simple because we're using the database model directly.  However, you may sometimes want to override this and perform your own translation.  Create the file `loader/todo.go` with the following content:
+
+```
+package loader
+
+import (
+	"context"
+
+	"github.com/example/todo/gnorm/public/todo"
+)
+
+func hydrateModelTodo(ctx context.Context, i todo.Row) todo.Row {
+	return i
+}
+```
+
+Because we're using the auto-generated model for User, we need to translate between the database record and GraphQL struct manually.  We could do the same as above, overriding the model with our own, but this demonstrates how it would look if we manually hydrated the models/User struct.  In `loader/user.go` we'll create the following:
+
+```
+package loader
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/example/todo/gnorm/public/user"
+	"github.com/example/todo/models"
+)
+
+func hydrateModelUser(ctx context.Context, i user.Row) (o models.User) {
+	o.ID = fmt.Sprintf("%d", i.UserID)
+	o.Username = i.Username
+	o.Admin = i.Admin
+
+	return
+}
+```
+
+We also need to ensure the database is initialised.  Open up `server.go` and let's initialise the loader by adding the following early in the main() function (after env.Parse):
+
+```
+	err = loader.InitialiseLoader(cfg.DBName, cfg.DBUser, cfg.DBPass, cfg.DBHost, log)
+	if err != nil {
+		log.Fatal(err)
+	}
+```
+
+And now for the main part, where we update the resolver to return the loader returned values.  In `resolvers/resolver.go`, update the file to match the following (a full explanation for the differences can be found by learning more about [gqlgen](https://github.com/99designs/gqlgen)):
+
+```
+package resolvers
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/example/todo/gnorm/public/todo"
+	"github.com/example/todo/graph"
+	"github.com/example/todo/loader"
+	"github.com/example/todo/models"
+)
+
+type Resolver struct{}
+
+func (r *Resolver) Mutation() graph.MutationResolver {
+	return &mutationResolver{r}
+}
+func (r *Resolver) Query() graph.QueryResolver {
+	return &queryResolver{r}
+}
+
+type mutationResolver struct{ *Resolver }
+
+func (r *mutationResolver) CreateTodo(ctx context.Context, input models.NewTodo) (*todo.Row, error) {
+	panic("not implemented")
+}
+
+type queryResolver struct{ *Resolver }
+
+func (r *queryResolver) Todos(ctx context.Context) ([]todo.Row, error) {
+	all, _, _, err := loader.Loader.GetAllTodo(ctx, models.Filter{})
+	return all, err
+}
+
+func (r *Resolver) Todo() graph.TodoResolver {
+	return &todoResolver{r}
+}
+
+type todoResolver struct{ *Resolver }
+
+func (t *todoResolver) User(ctx context.Context, obj *todo.Row) (*models.User, error) {
+	user, err := loader.Loader.GetUser(ctx, obj.UserID)
+	return &user, err
+}
+
+func (t *todoResolver) ID(ctx context.Context, obj *todo.Row) (string, error) {
+	return fmt.Sprintf("%d", obj.TodoID), nil
+}
+```
+
+The key line for fetching todo's from the database was this entry:
+
+```
+func (r *queryResolver) Todos(ctx context.Context) ([]dbl.Todo, error) {
+	all, _, _, err := loader.Loader.GetAllTodo(ctx, models.Filter{})
+	return all, err
+}
+```
+
+Finally, we re-run the generated and then run the server.  We pass in configuration values as environment variables so that it's easier to set for docker based production deployments:
+
+```
+go run github.com/episub/spawn generate
+DB_USER=spawn DB_PASS=spawn go run server.go
+```
+
+Try your query again, and it should now return the results from the database:
+
+```
+query {
+  todos {
+    id
+    content
+  }
+}
+```
+
+Moreover, we can now fetch the users from within the database as well:
+
+```
+query {
+  todos {
+    id
+    content
+    user {
+      id
+      username
+    }
+  }
+}
+```
+
+It may seem more cumbersome to have to translate between the database and GraphQL as we did for `User`, but this extra burden comes with the benefit of clear separation of concerns that should be separate.  It allows us to break the symmetry between database model and GraphQL model where needed, and allows a much more flexible design.  When not needed, we can use the database object directly as we did for `Todo`.
+
+In some cases you may want to have models in your GraphQL API that don't correspond to any one specific table in the database.  In those situations, you will create by hand the related functions to fetch from database and return the appropriate GraphQL model.  Auto-generation only helps for the common (but not exhaustive) scenario where there is a one to one mapping between table and GraphQL model.
+
+## Pagination
+
+This project provides some useful tools for auto-generating code to allow for pagination.  When using a PostgreSQL database with the auto-generated scripts, we enable [cursor-based pagination](https://graphql.org/learn/pagination/).   Suppose you wanted to provide a paginated list for todos.  Update your config to include the following (don't remove the other parts under 'generate'):
+
+```
+generate:
+  resolvers:
+  - singularName: "Todo"
+    pluralName: "Todos"
+    primaryKey: "TodoID" # Defaults to 'ID'
+    primaryKeyType: "int" # Defaults to 'string'
+    query: true
+```
+
+The `postgres` related configuration will auto-generate a few functions for us to interact with the database, including functions that can handle creating queries that support pagination.  The `resolvers` related option, setting `query: true`, automatically generates a `queryTodos` function for us in `resolvers/gen_todo.go`.  To get this to work, we need to fill out a few more details.
+
+First, update `schema.graphql` to include the types we will need.  Add the following:
+
+```
+type TodosConnection {
+	totalCount: Int!
+	edges: [TodoEdge!]
+	pageInfo: PageInfo!
+}
+
+type TodoEdge {
+	cursor: ID!
+	node: Todo!
+}
+
+input TodoFilter {
+	done: Boolean
+}
+
+enum TodoSort {
+	CONTENT
+}
+```
+
+And also under `type Query' in your schema, add:
+
+```
+todosConnection(first: Int, after: ID, last: Int, before: ID, filters: TodoFilter, sortField: TodoSort, sortDirection: SortDirection): TodosConnection!
+```
+
+Then, in a new `resolvers/todo.go` file, create the following:
+
+```
+package resolvers
+
+import (
+	"context"
+	"fmt"
+
+	sq "github.com/Masterminds/squirrel"
+	"github.com/example/todo/gnorm"
+	"github.com/example/todo/gnorm/public/todo"
+	"github.com/example/todo/models"
+)
+
+func editableUpdateTodoFields(ctx context.Context, id string) ([]string, error) {
+	return []string{}, nil
+}
+
+func sortTodo(ctx context.Context, sortField models.TodoSort, order gnorm.Order) (gnorm.Order, error) {
+	var err error
+	switch sortField {
+	case models.TodoSortContent:
+		err = order.AddField("content")
+	default:
+		err = fmt.Errorf("Unsupported sort field")
+	}
+
+	if err != nil {
+		err = fmt.Errorf("Cannot sort by field %s: %s", sortField, err)
+		return order, err
+	}
+
+	return order, nil
+}
+
+func filterTodo(ctx context.Context, f models.TodoFilter) (where []sq.Sqlizer, err error) {
+	if f.Done != nil {
+		where = append(where, sq.Eq{todo.DoneCol: *f.Done})
+	}
+	return
+}
+
+func (r *queryResolver) TodosConnection(
+	ctx context.Context,
+	first *int,
+	after *string,
+	last *int,
+	before *string,
+	filters *models.TodoFilter,
+	sortField *models.TodoSort,
+	sortDirection *models.SortDirection,
+) (
+	*models.TodosConnection,
+	error,
+) {
+	con, err := queryTodos(ctx, first, after, last, before, filters, sortField, sortDirection, []sq.Sqlizer{})
+	return &con, err
+}
+```
+
+`editableUpdateTodoFields` is used as part of the permissions system, and returns a list of fields that are allowed to be updated in the current context (such as the current authenticated user and the target object in question).  This is covered in more detail elsewhere.  For now, we return no fields, which effectively disables editing.
+
+`sortTodo` is the function that configures the sort order for this request, and can be highly configurable depending on your needs.  For now, we do a simple sort based on the text field.
+
+`filterTodo` we leave empty for the moment, but this is where filters can be applied to the transaction to restrict results.
+
+`TodosConnection` is the resolver that returns our results.
+
+Re-generate the code based on these changes:
+
+```
+go run github.com/episub/spawn generate
+```
+
+And launch the server:
+
+```
+DB_USER=spawn DB_PASS=spawn go run server.go
+```
+
+Try out some queries.  For example, fetch the first 5 results:
+
+```
+query {
+  todosConnection(first: 5) {
+    totalCount
+    edges {
+      cursor
+      node {
+        id
+        content
+      }
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+    }
+  }
+}
+```
+
+Or fetch the next page:
+
+```
+query {
+  todosConnection(first: 5, after: "5") {
+    totalCount
+    edges {
+      cursor
+      node {
+        id
+        content
+      }
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+    }
+  }
+}
+```
+
+Sort based on text:
+
+```
+query {
+  todosConnection(sortField: CONTENT) {
+    edges {
+      cursor
+      node {
+        id
+        content
+      }
+    }
+  }
+}
+```
+
+Filter results based on todo `done` status:
+
+```
+query {
+  todosConnection(sortField: CONTENT, filters: {done: false}) {
+    edges {
+      cursor
+      node {
+        id
+        content
+        done
+      }
+    }
+  }
+}
+```
+
+## User Permissions
+
+This project makes use of Open Policy Agent to give a powerful and highly flexible permissions framework.
+
+## PostgreSQL Advice
+
+* Use audit tables for storing and tracking history
