@@ -60,7 +60,8 @@ func All(ctx context.Context, db {{$rootPkg}}.DB) ([]Row, error) {
 	}
 	for q.Next() {
 		r := Row{}
-		err := q.Scan({{- range .Table.Columns.DBNames.Sorted}}{{with index $colsByName .}}
+		err := q.Scan(
+		{{range .Table.Columns.DBNames.Sorted}}{{with index $colsByName .}}
 		{{- if .IsArray }}pq.Array(&r.{{ .Name }}),{{- else -}}&r.{{ .Name }},{{ end }}{{end}}
 {{end -}})
 		if err != nil {
@@ -112,7 +113,8 @@ func Query(ctx context.Context, db {{$rootPkg}}.DB, where []sq.Sqlizer) ([]Row, 
 	}
 	for q.Next() {
 		r := Row{}
-		err := q.Scan({{- range .Table.Columns}}
+		err := q.Scan(
+		{{range .Table.Columns}}
 		{{- if .IsArray }}pq.Array(&r.{{ .Name }}),{{- else -}}&r.{{ .Name }},{{ end }}
 {{end -}})
 		if err != nil {
@@ -471,13 +473,13 @@ func prepareCreate(ctx context.Context, o *Row) error {
 		}
 
 		// Check that this is actually a UUID:
-		_, err := uuid.FromString(createdBy)
+		cbid, err := uuid.FromString(createdBy)
 
 		if err != nil {
 			return fmt.Errorf("Invalid 'created_by' value found in context")
 		}
 
-		o.CreatedBy = createdBy
+		o.CreatedBy = cbid
 	}
 	{{end}}
 	{{if eq $element.Name "UpdatedBy"}}
@@ -489,13 +491,13 @@ func prepareCreate(ctx context.Context, o *Row) error {
 	}
 
 	// Check that this is actually a UUID:
-	_, err := uuid.FromString(updatedBy)
+	ubid, err := uuid.FromString(updatedBy)
 
 	if err != nil {
 		return fmt.Errorf("Invalid 'created_by' value found in context")
 	}
 
-	o.UpdatedBy = updatedBy
+	o.UpdatedBy = ubid
 	{{end}}
 	{{if eq $element.DBName (printf "short_%s_id" $table)}}
 	// If no short client ID is given, we select the first 10 characters of the uuid id

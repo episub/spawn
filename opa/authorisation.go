@@ -7,8 +7,8 @@ import (
 	"log"
 	"reflect"
 
-	"bitbucket.org/blhc/api/store"
 	"github.com/99designs/gqlgen/graphql"
+	"github.com/episub/spawn/store"
 	"github.com/open-policy-agent/opa/rego"
 	opentracing "github.com/opentracing/opentracing-go"
 )

@@ -7,10 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"bitbucket.org/blhc/api/authorisation"
-	"github.com/episub/spawn/store"
-
-	"github.com/episub/spawn/vars"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/sirupsen/logrus"
 	"github.com/vektah/gqlparser/gqlerror"
@@ -260,23 +256,5 @@ func (a Auth) DestroySession(r *http.Request) {
 		if err != nil {
 			log.WithField("error", err).Error("Failed to destroy session")
 		}
-	}
-}
-
-// PolicyMW Runs the 'allow' check for policy
-func PolicyMW(prefix string, objectName string) func(http.Handler) http.Handler {
-	p := prefix
-	o := objectName
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			err := authorisation.Default(r.Context(), p, o, nil)
-			if err != nil {
-				w.WriteHeader(http.StatusUnauthorized)
-				w.Write([]byte(err.Error()))
-				return
-			}
-			ctx := context.WithValue(r.Context(), vars.SharedData, store.NewDataStore())
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
 	}
 }
