@@ -20,7 +20,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.4 // indirect
 	github.com/nbutton23/zxcvbn-go v0.0.0-20180912185939-ae427f1e4c1d
 	github.com/olekukonko/tablewriter v0.0.1 // indirect
-	github.com/open-policy-agent/opa v0.10.6
+	github.com/open-policy-agent/opa v0.11.0
 	github.com/opentracing-contrib/go-stdlib v0.0.0-20190324214902-3020fec0e66b
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4 // indirect
