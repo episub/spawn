@@ -76,7 +76,7 @@ func (a Auth) SessionMW(next http.Handler) http.Handler {
 			}
 
 			// Invalidate if expired:
-			if time.Now().After(session.GetExpiry()) {
+			if time.Now().After(session.GetExpiry()) || (!c.Expires.IsZero() && time.Now().After(c.Expires)) {
 				log.WithField("session", session.GetID()).Info("Session expired")
 				a.SetUnauthorised(w, r)
 				return
@@ -145,6 +145,7 @@ func (a *Auth) CheckAuthenticated(w http.ResponseWriter, r *http.Request) (User,
 func (a Auth) SetUnauthorised(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
+	a.logout(w, r)
 	gerr := gqlerror.Error{}
 	gerr.Message = "Invalid or expired session"
 	gerr.Extensions = map[string]interface{}{
@@ -220,6 +221,14 @@ func (a Auth) AuthenticationHandler(w http.ResponseWriter, r *http.Request) {
 
 // LogoutHandler Authenticates user and returns jwt if valid
 func (a Auth) LogoutHandler(w http.ResponseWriter, r *http.Request) {
+	a.logout(w, r)
+
+	w.WriteHeader(http.StatusOK)
+	return
+}
+
+// logout Logs the user out
+func (a Auth) logout(w http.ResponseWriter, r *http.Request) {
 	a.DestroySession(r)
 
 	c := &http.Cookie{
@@ -232,9 +241,6 @@ func (a Auth) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.SetCookie(w, c)
-
-	w.WriteHeader(http.StatusOK)
-	return
 }
 
 // DestroySession Destroys session if one exists

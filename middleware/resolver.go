@@ -9,10 +9,10 @@ import (
 	"unicode/utf8"
 
 	"github.com/99designs/gqlgen/graphql"
-	gqlopentracing "github.com/99designs/gqlgen/opentracing"
 	"github.com/episub/spawn/opa"
 	"github.com/episub/spawn/store"
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/ext"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/sirupsen/logrus"
 	"github.com/vektah/gqlparser/gqlerror"
@@ -36,7 +36,7 @@ func ResolverMiddleware(
 	defaultPayloadFunc func(context.Context, map[string]interface{}) error,
 	requestPayloadFunc func(context.Context, string, string, interface{}) error,
 ) graphql.FieldMiddleware {
-	opentracingMiddleware := gqlopentracing.ResolverMiddleware()
+	opentracingMiddleware := OpentracingResolverMiddleware()
 	defaultPayload := defaultPayloadFunc
 	requestPayload := requestPayloadFunc
 	return func(ctx context.Context, next graphql.Resolver) (interface{}, error) {
@@ -108,6 +108,33 @@ func ResolverMiddleware(
 				log.Printf("Error authorising view field for '%s.%s': %s", rctx.Object, rctx.Field.Alias, err)
 			}
 			return nil, nil
+		}
+
+		return res, err
+	}
+}
+
+// OpentracingResolverMiddleware Taken from an older version of gqlgen
+func OpentracingResolverMiddleware() graphql.FieldMiddleware {
+	return func(ctx context.Context, next graphql.Resolver) (interface{}, error) {
+		rctx := graphql.GetResolverContext(ctx)
+		span, ctx := opentracing.StartSpanFromContext(ctx, rctx.Object+"_"+rctx.Field.Name,
+			opentracing.Tag{Key: "resolver.object", Value: rctx.Object},
+			opentracing.Tag{Key: "resolver.field", Value: rctx.Field.Name},
+		)
+		defer span.Finish()
+		ext.SpanKind.Set(span, "server")
+		ext.Component.Set(span, "gqlgen")
+
+		res, err := next(ctx)
+
+		if err != nil {
+			ext.Error.Set(span, true)
+			span.LogFields(
+				otlog.String("event", "error"),
+				otlog.String("message", err.Error()),
+				otlog.String("error.kind", fmt.Sprintf("%T", err)),
+			)
 		}
 
 		return res, err
