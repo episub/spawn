@@ -1,0 +1,43 @@
+---
+name: Errors
+---
+
+# Errors
+
+When a GraphQL request has an error, we return these results formatted as part of the GraphQL JSON response.  These errors can be added using [gqlgen's build in method](https://gqlgen.com/reference/errors/).
+
+# Validation
+
+Spawn provides a validation library used to help validate values and add them as errors.  Most of the validation functions typically take as inputs parameters like:
+
+* Context: Errors are added to the context if there are any such errors to report
+* Field: The name of the field that has the error.  When using some of the auto-generated update and create code, a path is automatically added to the context so you can keep track of how deep you are in the chain, and get a full path.
+* Value: Whatever value is needed to be checked
+* Message: What error message you would like displayed in case of failure
+
+For example, to ensure that a password meets minimum length requirements, you can call:
+
+```
+validate.MinimumLength(ctx, 8, password, "password")
+```
+
+If the password fails to meet this requirement, then an error such as the following will be returned as part of the mutation response:
+
+```
+{
+  "errors": [
+    {
+      "message": "Must be at least 8 characters long",
+      "path": [
+        "registerUser"
+      ],
+      "extensions": {
+        "field": "password"
+      }
+    }
+  ],
+  "data": {
+    "registerUser": false
+  }
+}
+```
