@@ -81,32 +81,3 @@ func HasErrors(ctx context.Context) bool {
 	}
 	return false
 }
-
-//import (
-//	"fmt"
-//	"strings"
-//)
-//
-//// We use this so that we can pass validation errors within the error object
-//
-//// Error Error type
-//type Error struct {
-//	ValidationErrors []ValidationError
-//	NormalError      error
-//}
-//
-//func (e Error) Error() string {
-//	var message string
-//	var ve []string
-//
-//	for _, o := range e.ValidationErrors {
-//		ve = append(ve, fmt.Sprintf("Error validating field '%s': %s", o.Field, o.Message))
-//	}
-//
-//	message = strings.Join(ve, ". ")
-//	if len(e.NormalError.Error()) > 0 {
-//		message = message + ". " + e.NormalError.Error()
-//	}
-//
-//	return message
-//}

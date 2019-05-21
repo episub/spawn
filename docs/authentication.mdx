@@ -6,6 +6,10 @@ name: User Authentication
 
 This project provides one way of handling user authentication and sessions, but it is optional.  If you wish to use it, here is an example of how to set up a project using the authentication provided.  This example assumes you're working from a project based on the quickstart, or a reasonably fresh project.
 
+Note:
+
+* Automatically adds 'user' and 'created_by' values to context inside GetAuthenticationContext when using Spawn's session/authentication framework.  This is picked up by the auto generated code to set the database created by and inserted by values
+
 ## Modify Database
 
 First, let's create a table for our user account and to hold sessions.  Modify migrations/001-base.sql to be the following:

@@ -465,7 +465,7 @@ func prepareCreate(ctx context.Context, o *Row) error {
 	{{end}}
 	{{if eq $element.Name "CreatedBy"}}
 	// Set CreatedBy if not already set
-	if len(o.CreatedBy) == 0 {
+	if o.CreatedBy == uuid.Nil {
 		createdBy, ok := ctx.Value("created_by").(string)
 
 		if !ok {
@@ -487,7 +487,7 @@ func prepareCreate(ctx context.Context, o *Row) error {
 	updatedBy, ok := ctx.Value("created_by").(string)
 
 	if !ok {
-		return fmt.Errorf("Updated by by not set, and no 'created_by' value found in context")
+		return fmt.Errorf("Updated by not set, and no 'created_by' value found in context")
 	}
 
 	// Check that this is actually a UUID:
@@ -498,12 +498,6 @@ func prepareCreate(ctx context.Context, o *Row) error {
 	}
 
 	o.UpdatedBy = ubid
-	{{end}}
-	{{if eq $element.DBName (printf "short_%s_id" $table)}}
-	// If no short client ID is given, we select the first 10 characters of the uuid id
-	if len(o.ShortClientID) == 0 {
-		o.{{.Name}} = strings.Replace(o.ClientID, "-", "", -1)[:10]
-	}
 	{{end}}
 	{{end}}
 

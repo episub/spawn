@@ -111,7 +111,6 @@ func (l *PostgresLoader) run{{.ModelName}}Batcher() {
 				ids = append(ids, r.{{.ModelName}}ID)
 			}
 
-			log.Printf("Batched {{camel .ModelName}} size: %d", len({{camel .ModelName}}FRs))
 			{{camel .ModelName}}s, err = {{$package}}.Query(context.Background(), l.pool, []sq.Sqlizer{gnorm.In{{pascal .PrimaryKeyType}}({{$package}}.{{.PK}}Col, ids)})
 
 		OUTER:
