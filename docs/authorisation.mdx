@@ -1,0 +1,15 @@
+---
+name: Authorisation
+---
+
+Authorisation is concerned with whether or not a request is permitted to be performed.  Spawn provides a completely optional authorisation system built upon [Open Policy Agent](https://www.openpolicyagent.org/).
+
+# Access
+
+It may be desirable to make your GraphQL API available to any user, not just those that are authenticated.  There may be queries that you need unauthorised users to access.  For example, registering a new user account.
+
+To determine whether a visitor has permission to some particular query or mutation, an 'access' check is performed.  This is a light-weight check primarily for specifying if a user must be logged in or logged out (or either).  It is done at the level of a query or mutation.
+
+## Requirements
+
+It is expected that the user object is stored in the context prior to the ResolverMiddleware function being called, that is found under the name "user".  This user is then included as part of the input to the policy.
