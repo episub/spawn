@@ -1,5 +1,5 @@
 ---
-name: User Authentication
+name: Authentication
 ---
 
 # Authentiction
@@ -246,11 +246,11 @@ import (
 )
 
 // CreateSession Creates a new session
-func (l *PostgresLoader) CreateSession(ctx context.Context, userID int, expiry time.Time) (uuid.UUID, error) {
+func (l *PostgresLoader) CreateSession(ctx context.Context, userID uuid.UUID, expiry time.Time) (uuid.UUID, error) {
 	var err error
 	var i session.Row
 	i.Expires = expiry
-	i.UserID = userID
+	i.UserIDUser = userID
 
 	i, err = session.Upsert(ctx, l.pool, i)
 
@@ -376,6 +376,27 @@ func (r *Resolver) User() graph.UserResolver {
 
 func (u *userResolver) ID(ctx context.Context, obj *user.Row) (string, error) {
 	return fmt.Sprintf("%d", obj.UserID), nil
+}
+```
+
+Hydrate functions in loader/hydrate.go:
+
+```
+package loader
+
+import (
+	"context"
+
+	"github.com/example/todo/gnorm/public/todo"
+	"github.com/example/todo/gnorm/public/user"
+)
+
+func hydrateModelUser(ctx context.Context, i user.Row) (o user.Row) {
+	return i
+}
+
+func hydrateModelTodo(ctx context.Context, i todo.Row) (o todo.Row) {
+	return i
 }
 ```
 

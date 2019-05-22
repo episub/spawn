@@ -130,6 +130,11 @@ var initCmd = cli.Command{
 		createFileFromTemplate("gnorm.toml", "gnorm.toml")
 		createFileFromTemplate("config.yaml", "config.yaml")
 
+		// OPA policy related files
+		_ = os.MkdirAll("policies/bundle/api/entity", 0755)
+		_ = os.MkdirAll("policies/bundle/api/mutation", 0755)
+		_ = os.MkdirAll("policies/bundle/api/query", 0755)
+
 		generateGQL(ctx)
 		createFileFromTemplate("server.go", "server.go")
 		createFileFromTemplate("loader/init.gotmpl", "loader/init.go")

@@ -45,12 +45,12 @@ go run github.com/episub/spawn generate
 This gives us the GraphQL code.  We have one final task: filling out the resolvers code in `resolvers/resolver.go` to tell our server what to return when someone requests all the todos (we'll leave the others for now):
 
 ```
-func (r *queryResolver) Todos(ctx context.Context) ([]models.Todo, error) {
-	todos := make([]models.Todo, 3)
+func (r *queryResolver) Todos(ctx context.Context) ([]*models.Todo, error) {
+	todos := make([]*models.Todo, 3)
 
 	for i, _ := range todos {
-		todos[i] = models.Todo{
-			ID:   fmt.Sprintf("%d", i),
+		todos[i] = &models.Todo{
+			ID:      fmt.Sprintf("%d", i),
 			Content: fmt.Sprintf("Todo number %d", i),
 		}
 	}
