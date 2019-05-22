@@ -11,14 +11,13 @@ import (
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/episub/spawn/opa"
 	"github.com/episub/spawn/store"
+	"github.com/episub/spawn/vars"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/sirupsen/logrus"
 	"github.com/vektah/gqlparser/gqlerror"
 )
-
-const sharedData = "shareData"
 
 // CheckAccess Used to determine a first-pass access to a query.  Can check basic things like, is this user logged in?
 func CheckAccess(ctx context.Context, prefix string, object string, input map[string]interface{}) (bool, error) {
@@ -162,7 +161,7 @@ func hasFieldAccess(ctx context.Context, object interface{}, defaultPayload func
 		cacheName := strings.Join(fl, ".") + ":" + policy
 
 		// Check for cached answer:
-		v, err := store.ContextReadValue(ctx, sharedData, cacheName)
+		v, err := store.ContextReadValue(ctx, vars.SharedData, cacheName)
 		if err != nil {
 			return false, err
 		}
@@ -247,7 +246,7 @@ func fullFieldList(rctx graphql.ResolverContext, useIndex bool) []string {
 
 // addData Stores data in the current context
 func addData(ctx context.Context, name string, value interface{}) {
-	data := ctx.Value(sharedData)
+	data := ctx.Value(vars.SharedData)
 
 	if data == nil {
 		return

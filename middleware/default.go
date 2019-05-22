@@ -15,7 +15,7 @@ import (
 func DefaultMW(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), vars.SharedData, store.NewDataStore())
-		ctx = validate.SetContext(r.Context())
+		ctx = validate.SetContext(ctx)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

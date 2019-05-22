@@ -13,3 +13,266 @@ To determine whether a visitor has permission to some particular query or mutati
 ## Requirements
 
 It is expected that the user object is stored in the context prior to the ResolverMiddleware function being called, that is found under the name "user".  This user is then included as part of the input to the policy.
+
+# Example
+
+For this example, complete the 'Initialise Project' steps for the Quickstart.  We won't use user authentication for this example.
+
+Create a new file `authorise.go` in the root folder:
+
+```
+package main
+
+import (
+	"context"
+
+	opentracing "github.com/opentracing/opentracing-go"
+)
+
+// defaultPayload A payload that is included in every policy request, good for
+// including default data you always want included.  E.g., user account
+func defaultPayload(ctx context.Context, input map[string]interface{}) error {
+
+	return nil
+}
+
+// requestPayload Called for each mutation or query root level request, an
+// opportunity to inject request or mutation specific data that can then be
+// used by the policy
+func requestPayload(ctx context.Context, prefix string, objectName string, obj interface{}) error {
+	span, ctx := opentracing.StartSpanFromContext(ctx, "requestPayload")
+	defer span.Finish()
+
+	return nil
+}
+```
+
+We then configure the router to use these functions and to perform policy checks.  Edit server.go, adding a new line so that your route looks something like this:
+
+```
+import (
+	...
+	spawn "github.com/episub/spawn/middleware"
+	...
+)
+
+...
+	externalRouter.Use(spawn.DefaultMW)
+	externalRouter.Route("/query", func(r chi.Router) {
+		r.Use(middleware.Timeout(60 * time.Second))
+		r.Handle("/", handler.GraphQL(
+			api.NewExecutableSchema(graphqlConfig()),
+			handler.ResolverMiddleware(spawn.ResolverMiddleware(defaultPayload, requestPayload)),
+			handler.RequestMiddleware(requestMiddleware()),
+		))
+	})
+...
+```
+
+DataMW adds a thread safe data store to the context that's used to help with policy requests, and the resolver middleware does the work of calling the right policies before letting requests through.  Finally, we need to load the policies.  Add the following to `server.go`:
+
+```
+import (
+	...
+	sopa "github.com/episub/spawn/opa"
+	...
+)
+
+func main() {
+	...
+	err = sopa.LoadBundle("policies/bundle")
+
+	if err != nil {
+		panic(err)
+	}
+	...
+}
+```
+
+Now you can run the server:
+
+```
+go run *go
+```
+
+And try the standard query:
+
+```
+query {
+  todos {
+    id
+    content
+  }
+}
+```
+
+This will result in an error like `Authorisation rejected based on 'access' policy for Query`.  This is likely because we have not yet created any policy, so it rejectst by defauly.  Checking the server logs reveals this to be the case:
+
+```
+No such policy data.api.query.todos.access
+```
+
+Let's create a policy `policies/bundle/api/query/todos.rego`:
+
+```
+package api.query.todos
+
+default access = true
+```
+
+The policies should automatically reload, so you can try the server again without restarting, to see a new error:
+
+```
+{
+  "errors": [
+    {
+      "message": "Not authorised to view field 'Query.todos'",
+      "path": [
+        "todos"
+      ],
+      "extensions": {
+        "code": "5",
+        "field": "Query.todos"
+      }
+    }
+  ],
+  "data": null
+}
+```
+
+'access' policies are used for simple checks such as whether or not a user is logged in.  Some endpoints we want to make available only to authenticated users, some to unauthenticated, and some to both.  The 'access' check is a good place for that logic.  It takes place before we do any fetching objects from the database.
+
+'allow' checks, on the other hand, are performed after the query is completed, so that we can pass the fetched data to the policy and do a fuller check.  For example, suppose that a user is requesting to view a 'client'.  We will want to have fetched that client before we make a decision about whether they can view it.
+
+For now, let's just allow everything.  Update the same policy to now look like the following:
+
+```
+package api.query.todos
+
+default access = true
+
+default allow = true
+```
+
+Quite apart from permissions to access a mutation or query are permissions to view individual fields.  You may only want certain types of users to access particular fields.  The solution here is not perfect, but it will work for many use cases.
+
+We create a new 'entity' policy, which you should think of as answering this question: "given that the user has permission to access this object, what field(s) should they be permitted to see?".  Create the policy `policies/bundle/api/entity/query.rego` with the following content, allowing access to the results of all root level queries:
+
+```
+package api.entity.query
+
+default viewField = true
+```
+
+And then a separate policy where we define permissions to access the fields of a todo object, `policies/bundle/api/entity/todo.rego`:
+
+```
+package api.entity.todo
+
+default defaultFields = {
+    "id",
+    "content"
+}
+
+default viewField = false
+
+allowedFields[field] {
+    f := defaultFields
+    field = f[_]
+}
+
+viewField {
+    allowedFields[i] = input.field
+}
+```
+
+Here we define a rule 'allowedFields', of which there can be multiple, and build up a list of permitted fields -- in this case, the 'defaultFields'.  The final 'viewField' rule checks for the requested field's presence inside the fields list built up by the 'allowedFields' rules before.  Try the query again, and you should see the results:
+
+```
+{
+  "data": {
+    "todos": [
+      {
+        "id": "0",
+        "content": "Todo number 0"
+      },
+      {
+        "id": "1",
+        "content": "Todo number 1"
+      },
+      {
+        "id": "2",
+        "content": "Todo number 2"
+      }
+    ]
+  }
+}
+```
+
+Now try adding the 'done' field to your request, and observe that you now hit a permission error:
+
+```
+query {
+  todos {
+    id
+    content
+    done
+  }
+}
+
+...
+
+{
+  "errors": [
+    {
+      "message": "Not authorised to view field 'Todo.done'",
+      "path": [
+        "todos",
+        0,
+        "done"
+      ],
+      "extensions": {
+        "code": "5",
+        "field": "Todo.done"
+      }
+    },
+    {
+      "message": "Not authorised to view field 'Todo.done'",
+      "path": [
+        "todos",
+        2,
+        "done"
+      ],
+      "extensions": {
+        "code": "5",
+        "field": "Todo.done"
+      }
+    },
+    {
+      "message": "Not authorised to view field 'Todo.done'",
+      "path": [
+        "todos",
+        1,
+        "done"
+      ],
+      "extensions": {
+        "code": "5",
+        "field": "Todo.done"
+      }
+    }
+  ],
+  "data": {
+    "todos": [
+      null,
+      null,
+      null
+    ]
+  }
+}
+```
+
+If you wish users to be able to access this field, add it to the list of fields in the policy and try again.
+
+There is much more to be done, and most of that is a result of learning how to use Open Policy Agent.  You will want to send information about the requesting user as part of your default policy, though this can be done automatically (see above under 'Requirements').
+
+If you wanted to implement a role based authorisation system, you can certainly do that.  You will send a list of roles for the requesting user as part of the policy payload, and define your permissions based on those roles.

@@ -1,7 +1,5 @@
 module github.com/example/todo
 
-replace github.com/episub/spawn => /home/mark/projects/episub/spawn
-
 go 1.12
 
 require (
