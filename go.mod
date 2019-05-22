@@ -6,17 +6,22 @@ require (
 	cloud.google.com/go v0.37.2
 	github.com/99designs/gqlgen v0.9.0
 	github.com/OneOfOne/xxhash v1.2.5 // indirect
+	github.com/armon/go-metrics v0.0.0-20190430140413-ec5e00d3c878
 	github.com/caarlos0/env v3.5.0+incompatible
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
 	github.com/codemodus/kace v0.5.1
 	github.com/episub/pqt v0.0.0-20181112131323-01e28ce941a0
+	github.com/fatih/color v1.7.0 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-chi/chi v4.0.2+incompatible
 	github.com/go-sql-driver/mysql v1.4.1 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gofrs/uuid v3.2.0+incompatible
+	github.com/hokaccha/go-prettyjson v0.0.0-20180920040306-f579f869bbfe
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/lib/pq v1.0.0 // indirect
+	github.com/mattn/go-colorable v0.1.1 // indirect
+	github.com/mattn/go-isatty v0.0.8 // indirect
 	github.com/mattn/go-runewidth v0.0.4 // indirect
 	github.com/nbutton23/zxcvbn-go v0.0.0-20180912185939-ae427f1e4c1d
 	github.com/olekukonko/tablewriter v0.0.1 // indirect

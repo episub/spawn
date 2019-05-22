@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"reflect"
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/episub/spawn/store"
+	prettyjson "github.com/hokaccha/go-prettyjson"
+	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/rego"
 	opentracing "github.com/opentracing/opentracing-go"
 )
@@ -135,27 +138,38 @@ func GetInt(ctx context.Context, policy string, data map[string]interface{}) (in
 func runRego(ctx context.Context, query string, input map[string]interface{}) (rego.ResultSet, error) {
 	span, ctx := opentracing.StartSpanFromContext(ctx, "runRego")
 	defer span.Finish()
+	debug := len(os.Getenv("DEBUG_OPA")) > 0
 	// Fetch user from context, if exists.  If not, we don't mind -- some actions will be publicly possible:
 
-	//	jsonString, err := prettyjson.Marshal(input)
-	//
-	//	if err != nil {
-	//		panic(err)
-	//	}
-	//
-	//	fmt.Printf("rego input json for %s:\n", query)
-	//	fmt.Println(string(jsonString))
+	if debug {
+		jsonString, err := prettyjson.Marshal(input)
+
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Printf("rego input json for %s:\n", query)
+		fmt.Println(string(jsonString))
+	}
+
 	compiler := GetCompiler(ctx)
 	store := GetStore(ctx)
 
 	compiled := getCompiledQuery(query)
+
+	m := metrics.New()
 
 	rego := rego.New(
 		rego.ParsedQuery(compiled),
 		rego.Compiler(compiler),
 		rego.Input(input),
 		rego.Store(store),
+		rego.Metrics(m),
 	)
 
-	return rego.Eval(ctx)
+	rs, err := rego.Eval(ctx)
+	if debug {
+		fmt.Println("Dumping rego.Eval metrics:", m.All())
+	}
+	return rs, err
 }

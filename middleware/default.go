@@ -19,3 +19,14 @@ func DefaultMW(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
+
+// BodyLimitMW Limits body size to the provided bytes
+func BodyLimitMW(size int64) func(http.Handler) http.Handler {
+	bodyLimit := size
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, bodyLimit)
+			next.ServeHTTP(w, r)
+		})
+	}
+}
