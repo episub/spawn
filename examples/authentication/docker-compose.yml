@@ -1,0 +1,12 @@
+version: '3'
+services:
+  postgres:
+    image: postgres:9.6
+    ports:
+    - "5432:5432"
+    restart: always
+    environment:
+      POSTGRES_USER: spawn
+      POSTGRES_PASSWORD: spawn
+    volumes:
+      - ./migrations:/docker-entrypoint-initdb.d
