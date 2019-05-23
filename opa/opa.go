@@ -10,6 +10,7 @@ import (
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/loader"
+	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -19,7 +20,7 @@ import (
 var unsafeCompiler = ast.NewCompiler()
 var unsafeDocuments = map[string]interface{}{}
 var unsafeStore storage.Store
-var unsafeQueries map[string]ast.Body
+var unsafeRegos map[string]rego.PreparedEvalQuery
 var regoStore storage.Store
 var loaded bool
 var mutex = &sync.RWMutex{}
@@ -153,25 +154,34 @@ func loadCompiler(path string) error {
 	return nil
 }
 
-func getCompiledQuery(query string) ast.Body {
-	var compiled ast.Body
-
+func getCompiledQuery(query string) rego.PreparedEvalQuery {
 	// Check if already compiled:
 	queryMutex.RLock()
-	if compiled, ok := unsafeQueries[query]; ok {
-		compiled = unsafeQueries[query]
+	if compiled, ok := unsafeRegos[query]; ok {
+		compiled = unsafeRegos[query]
 		queryMutex.RUnlock()
+		log.Printf("Returning compiled query")
 		return compiled
 	}
 	queryMutex.RUnlock()
 
 	// We must compile ourselves:
 	queryMutex.Lock()
-	compiled = ast.MustParseBody(query)
-	unsafeQueries[query] = compiled
+	ctx := context.Background()
+	store := GetStore(ctx)
+
+	r := rego.New(
+		rego.Query(query),
+		rego.Store(store),
+	)
+	pq, err := r.PrepareForEval(ctx)
+	if err != nil {
+		panic(err)
+	}
+	unsafeRegos[query] = pq
 	queryMutex.Unlock()
 
-	return compiled
+	return pq
 }
 
 func setCompiler(compiler *ast.Compiler, documents map[string]interface{}) {
@@ -183,6 +193,6 @@ func setCompiler(compiler *ast.Compiler, documents map[string]interface{}) {
 	unsafeStore = inmem.NewFromObject(unsafeDocuments)
 	dMutex.Unlock()
 	queryMutex.Lock()
-	unsafeQueries = make(map[string]ast.Body)
+	unsafeRegos = make(map[string]rego.PreparedEvalQuery)
 	queryMutex.Unlock()
 }

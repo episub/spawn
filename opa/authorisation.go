@@ -11,7 +11,6 @@ import (
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/episub/spawn/store"
 	prettyjson "github.com/hokaccha/go-prettyjson"
-	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/rego"
 	opentracing "github.com/opentracing/opentracing-go"
 )
@@ -152,24 +151,8 @@ func runRego(ctx context.Context, query string, input map[string]interface{}) (r
 		fmt.Println(string(jsonString))
 	}
 
-	compiler := GetCompiler(ctx)
-	store := GetStore(ctx)
+	r := getCompiledQuery(query)
 
-	compiled := getCompiledQuery(query)
-
-	m := metrics.New()
-
-	rego := rego.New(
-		rego.ParsedQuery(compiled),
-		rego.Compiler(compiler),
-		rego.Input(input),
-		rego.Store(store),
-		rego.Metrics(m),
-	)
-
-	rs, err := rego.Eval(ctx)
-	if debug {
-		fmt.Println("Dumping rego.Eval metrics:", m.All())
-	}
+	rs, err := r.Eval(ctx, rego.EvalInput(input))
 	return rs, err
 }
