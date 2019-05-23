@@ -29,10 +29,10 @@ const TableName = "{{.Table.DBName}}"
 // Row represents a row from '{{ $table }}'.
 type Row struct {
 {{- range .Table.PrimaryKeys.DBNames.Sorted }}{{ with (index $colsByName .)}}
-	{{ .Name }} {{ if .IsArray }}[]{{ end }}{{ .Type }}  // {{ .DBName }} (PK){{end}}
+	{{ .Name }} {{ if .IsArray }}[]{{ end }}{{ .Type }} `json:"{{.DBName}}"` // {{ .DBName }} (PK){{end}}
 {{- end }}
 {{- range $nonPKDBNames }}{{ with (index $colsByName .) }}
-	{{ .Name }} {{ if .IsArray }}[]{{ end }}{{ .Type }}  // {{ .DBName }}{{end}}
+	{{ .Name }} {{ if .IsArray }}[]{{ end }}{{ .Type }} `json:"{{.DBName}}"` // {{ .DBName }}{{end}}
 {{- end }}
 }
 
