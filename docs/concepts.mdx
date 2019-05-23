@@ -2,7 +2,7 @@
 name: Concepts
 ---
 
-Estack is a collection of tools for building a GraphQL API witha PostgreSQL database.
+Spawn is a collection of tools for building a GraphQL API witha PostgreSQL database.
 
 It's designed around these principles:
 
@@ -14,7 +14,7 @@ It's designed around these principles:
 
 # Tools
 
-Estack makes use of:
+Spawn makes use of:
 
 * Gnorm for generating functions relating to database interaction
 * gqlgen for the GraphQL server
@@ -33,7 +33,7 @@ Estack makes use of:
 
 # Database
 
-Estack embraces the view that the database is not an inconsequential choice, and should not be abstracted away until it is indistinguishable from other databases.  Developers and companies choose particular databases because of their virtues, and often those virtues cannot be fully realised if they are abstracted away through a generic interface that's interchangeable with other databases.
+Spawn embraces the view that the database is not an inconsequential choice, and should not be abstracted away until it is indistinguishable from other databases.  Developers and companies choose particular databases because of their virtues, and often those virtues cannot be fully realised if they are abstracted away through a generic interface that's interchangeable with other databases.
 
 These concerns apply to ORM's in general.  This project will auto-generate some functions that allow you to retrieve and insert data into the database, playing some of the role that an ORM would play, but they cover only basic CRUD type operations.  These are optional helper functions that you can choose to generate or override yourself.  Anything more complicated, and you will be writing it yourself, particularly when there is a deeper mismatch between your database model and your application model.
 

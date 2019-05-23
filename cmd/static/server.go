@@ -76,17 +76,18 @@ func initJaeger(service string) (opentracing.Tracer, io.Closer) {
 	}
 	jcfg.Sampler.Type = "const"
 	jcfg.Sampler.Param = 1
+	jcfg.ServiceName = service
 	jcfg.Reporter.LogSpans = cfg.DebugSpans
 
 	log.WithField("hostport", jcfg.Reporter.LocalAgentHostPort).Printf("Jaeger connected")
 
 	jl := jaegerLogger{log}
 
-	tracer, closer, err := jcfg.New(service, jaegerConfig.Logger(&jl))
+	tracer, closer, err := jcfg.NewTracer(jaegerConfig.Logger(&jl))
 	if err != nil {
 		log.WithField("error", err).Error("Cannot init Jaeger, so setting to localhost")
 		jcfg.Reporter.LocalAgentHostPort = "127.0.0.1:6831"
-		tracer, closer, _ = jcfg.New(service, jaegerConfig.Logger(&jl))
+		tracer, closer, _ = jcfg.NewTracer(jaegerConfig.Logger(&jl))
 	}
 
 	return tracer, closer
