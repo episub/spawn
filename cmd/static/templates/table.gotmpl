@@ -142,7 +142,7 @@ func All{{$element}}(ctx context.Context, db {{$rootPkg}}.DB) ([]{{$element}}Row
 	for q.Next() {
 		r, err := {{$element}}Scanner(q)
 		if err != nil {
-			return nil, errors.Wrap(err, "all {{$dot.Table.Name}}")
+			return nil, errors.Wrap(err, "all{{$element}} {{$dot.Table.Name}}")
 		}
 		vals = append(vals, r)
 	}
@@ -187,12 +187,12 @@ func Query{{$element}}(ctx context.Context, db {{$rootPkg}}.DB, where []sq.Sqliz
 	var vals []{{$element}}Row
 	q, err := db.Query(sqlstr, args...)
 	if err != nil {
-		return nil, errors.Wrap(err, "query {{$dot.Table.Name}}")
+		return nil, errors.Wrap(err, "query{{$element}} query {{$dot.Table.Name}}")
 	}
 	for q.Next() {
 		r, err := {{$element}}Scanner(q)
 		if err != nil {
-			return nil, errors.Wrap(err, "query {{$dot.Table.Name}}")
+			return nil, errors.Wrap(err, "query{{$element}} {{$dot.Table.Name}}")
 		}
 		vals = append(vals, r)
 	}
@@ -348,17 +348,18 @@ func Find{{$element}}(ctx context.Context, db {{$rootPkg}}.DB,
 	{{end -}})
 	r, err := {{$element}}Scanner(q)
 	if err != nil {
-		return {{$element}}Row{}, errors.Wrap(err, "find {{$parent.Name}}")
+		return {{$element}}Row{}, errors.Wrap(err, "find{{$element}} {{$parent.Name}}")
 	}
 	return r, nil
 }
 {{end}}
 {{end}}
 
-// One retrieve one row from '{{ $table }}'.
-func One(ctx context.Context, db {{$rootPkg}}.DB, where []sq.Sqlizer, order *gnorm.Order) (Row, error) {
-	qry := gnorm.Qry().Select(`{{ join .Table.Columns.DBNames ", " }}`)
-	qry = qry.From("{{$schema}}.{{ $table }}")
+{{if .Table.HasPrimaryKey }}
+{{range $index, $element := $tables}}
+// One{{$element}} retrieve one row from '{{ $table }}'.
+func One{{$element}}(ctx context.Context, db {{$rootPkg}}.DB, where []sq.Sqlizer, order *gnorm.Order) ({{$element}}Row, error) {
+	qry := gnorm.Qry().Select({{$element}}Select)
 
 	for _, w := range where {
 		qry = qry.Where(w)
@@ -372,18 +373,18 @@ func One(ctx context.Context, db {{$rootPkg}}.DB, where []sq.Sqlizer, order *gno
 
 	sqlstr, args, err := qry.ToSql()
 	if err != nil {
-		return Row{}, err
+		return {{$element}}Row{}, err
 	}
 
-	r := Row{}
-	err = db.QueryRow(sqlstr, args...).Scan({{- range .Table.Columns}}
-		{{- if .IsArray }}pq.Array(&r.{{ .Name }}),{{- else -}}&r.{{ .Name }},{{ end }}
-{{end -}})
+	q := db.QueryRow(sqlstr, args...)
+	r, err := {{$element}}Scanner(q)
 	if err != nil {
-		return Row{}, errors.Wrap(err, "queryOne {{.Table.Name}}")
+		return {{$element}}Row{}, errors.Wrap(err, "queryOne{{$element}} {{$parent.Name}}")
 	}
 	return r, nil
 }
+{{end}}
+{{end}}
 
 // Upsert Creates or updates record based on input
 func Upsert(ctx context.Context, db gnorm.DB, o Row) (Row, error) {
