@@ -78,7 +78,7 @@ var (
 )
 
 // Scanner Scans the provided row into a Row struct and returns it
-func Scanner(row *pgx.Rows) (Row, error) {
+func Scanner(row gnorm.Scanner) (Row, error) {
 	var r Row
 	err := row.Scan(
 	{{range .Table.Columns.DBNames.Sorted}}{{with index $colsByName .}}
@@ -91,7 +91,7 @@ func Scanner(row *pgx.Rows) (Row, error) {
 
 {{if $child}}
 // FullScanner Scans the provided row into a FullRow struct and returns it
-func FullScanner(row *pgx.Rows) (FullRow, error) {
+func FullScanner(row gnorm.Scanner) (FullRow, error) {
 	var r FullRow
 	err := row.Scan(
 	{{range .Table.Columns.DBNames.Sorted}}{{with index $colsByName .}}
@@ -332,28 +332,27 @@ placeholders of the form $1, $2, etc */}}
 
 
 {{if .Table.HasPrimaryKey }}
-// Find retrieves a row from '{{ $table }}' by its primary key(s).
-func Find(ctx context.Context, db {{$rootPkg}}.DB,
-{{- range .Table.PrimaryKeys.DBNames.Sorted}}
+{{range $index, $element := $tables}}
+// Find{{$element}} retrieves a row from '{{ $table }}' by its primary key(s).
+func Find{{$element}}(ctx context.Context, db {{$rootPkg}}.DB,
+{{- range $parent.PrimaryKeys.DBNames.Sorted}}
 	{{- with index $colsByName .}}
 	{{camel .DBName}} {{.Type}},{{end}}
-{{end -}}) (Row, error) {
-	const sqlstr = `SELECT
-		{{ join .Table.Columns.DBNames.Sorted ", " }}
-	FROM {{$schema}}.{{ $table }} WHERE ( {{join .Table.PrimaryKeys.DBNames.Sorted ", "}} = {{template "values" (len .Table.PrimaryKeys)}} )`
+{{end -}}) ({{$element}}Row, error) {
+	const sqlstr = {{$element}}Select + `
+	WHERE ( {{join $parent.PrimaryKeys.DBNames.Sorted ", "}} = {{template "values" (len $parent.PrimaryKeys)}} )`
 
-	r := Row{}
-	err := db.QueryRow(sqlstr,
-	{{- range .Table.PrimaryKeys.DBNames.Sorted}}
+	q := db.QueryRow(sqlstr,
+	{{- range $parent.PrimaryKeys.DBNames.Sorted}}
 		{{camel .}},
-	{{end -}}).Scan({{- range .Table.Columns.DBNames.Sorted}}{{with index $colsByName .}}
-		{{- if .IsArray }}pq.Array(&r.{{ .Name }}),{{- else -}}&r.{{ .Name }},{{ end }}{{end}}
-{{end -}})
+	{{end -}})
+	r, err := {{$element}}Scanner(q)
 	if err != nil {
-		return Row{}, errors.Wrap(err, "find {{.Table.Name}}")
+		return {{$element}}Row{}, errors.Wrap(err, "find {{$parent.Name}}")
 	}
 	return r, nil
 }
+{{end}}
 {{end}}
 
 // One retrieve one row from '{{ $table }}'.
