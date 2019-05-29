@@ -107,18 +107,22 @@ func FullScanner(row gnorm.Scanner) (FullRow, error) {
 {{end}}
 
 // Select Column and table select values
-const Select = `{{ join .Table.Columns.DBNames.Sorted ", " }} FROM {{$schema}}.{{$table}}`
+const Select = `p.{{ join .Table.Columns.DBNames.Sorted ", p." }} FROM {{$schema}}.{{$table}} as p`
 
 {{if $child}}
+// FullSelectFields Fields to use for fetching all from parent and child table
+const FullSelectFields = `p.{{ join $parent.Columns.DBNames.Sorted ", p." }},
+c.{{ join $child.Columns.DBNames.Sorted ", c." }}`
+
 // FullSelect Column and table select values for parent and version child
 const FullSelect = `p.{{ join $parent.Columns.DBNames.Sorted ", p." }},
 c.{{ join $child.Columns.DBNames.Sorted ", c." }}
 FROM {{$schema}}.{{$parent.DBName}} as p
 INNER JOIN {{$schema}}.{{$child.DBName}} as c
 ON p.{{$parentKey.DBName}} = c.{{$parentKey.DBName}}_{{$parent.DBName}}
-AND c.created = 
+AND c.{{snake $params.CreatedAtField}} = 
 (
-	SELECT Max(created)
+	SELECT Max({{snake $params.CreatedAtField}})
 	FROM {{$schema}}.{{$child.DBName}}
 	WHERE {{$parentKey.DBName}} = {{$parentKey.DBName}}_{{$parent.DBName}}
 )`
@@ -339,7 +343,7 @@ func Find{{$element}}(ctx context.Context, db {{$rootPkg}}.DB,
 	{{- with index $colsByName .}}
 	{{camel .DBName}} {{.Type}},{{end}}
 {{end -}}) ({{$element}}Row, error) {
-	const sqlstr = {{$element}}Select + `
+	const sqlstr = `SELECT ` + {{$element}}Select + `
 	WHERE ( {{join $parent.PrimaryKeys.DBNames.Sorted ", "}} = {{template "values" (len $parent.PrimaryKeys)}} )`
 
 	q := db.QueryRow(sqlstr,
