@@ -59,7 +59,7 @@ func permissionDeniedError(objectName string) error {
 // Performs multiple authorisation checks
 func ResolverMiddleware(
 	defaultPayloadFunc func(context.Context, map[string]interface{}) error,
-	requestPayloadFunc func(context.Context, string, string, map[string]interface{}) (map[string]interface{}, error),
+	requestPayloadFunc func(context.Context, string, string, map[string]interface{}) error,
 ) graphql.FieldMiddleware {
 	opentracingMiddleware := OpentracingResolverMiddleware()
 	defaultPayload := defaultPayloadFunc
@@ -115,9 +115,9 @@ func ResolverMiddleware(
 		if rctx.Object == "Query" {
 			err = runAllowCheck(ctx, requestPayload, rctx, res)
 			// err = requestPayload(ctx, strings.ToLower(rctx.Object), rctx.Field.Name, res)
-			// if err != nil {
-			// return nil, err
-			// }
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		// Store the value we've had returned here so it can be used by OPA
@@ -152,22 +152,25 @@ func ResolverMiddleware(
 
 func runAllowCheck(
 	ctx context.Context,
-	requestPayload func(context.Context, string, string, map[string]interface{}) (map[string]interface{}, error),
+	requestPayload func(context.Context, string, string, map[string]interface{}) error,
 	rctx *graphql.ResolverContext,
-	args interface{},
+	data interface{},
 ) error {
-	data, ok := args.(map[string]interface{})
-	if !ok {
-		data = map[string]interface{}{
-			"object": args,
-		}
+	input := make(map[string]interface{})
+
+	dataMap, ok := data.(map[string]interface{})
+	if ok {
+		mergeMap(input, dataMap)
+	} else {
+		input["entity"] = data
 	}
-	input, err := requestPayload(ctx, strings.ToLower(rctx.Object), rctx.Field.Name, data)
+	mergeMap(input, rctx.Args)
+
+	err := requestPayload(ctx, strings.ToLower(rctx.Object), rctx.Field.Name, input)
 	if err != nil {
 		return err
 	}
 
-	mergeMap(input, rctx.Args)
 	return CheckAllowed(ctx, strings.ToLower(rctx.Object), rctx.Field.Name, input)
 }
 
