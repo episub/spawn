@@ -242,7 +242,7 @@ func (l *PostgresLoader) update{{.ModelName}}(ctx context.Context, db gnorm.DB, 
 }
 
 // create{{.PmName}} Creates {{.PmName}} from given input
-func (l *PostgresLoader) create{{.PmName}}(ctx context.Context, db DB, i map[string]interface{}) (o {{$package}}.Row, err error) {
+func (l *PostgresLoader) create{{.PmName}}(ctx context.Context, db gnorm.DB, i map[string]interface{}) (o {{$package}}.Row, err error) {
 	span, ctx := opentracing.StartSpanFromContext(ctx, "create{{.PmName}}")
 	defer span.Finish()
 

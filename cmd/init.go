@@ -118,7 +118,6 @@ var initCmd = cli.Command{
 			exit(err)
 		}
 
-		_ = os.Mkdir("migrations", 0755)
 		_ = os.Mkdir("static", 0755)
 		_ = os.Mkdir("templates", 0755)
 		_ = os.Mkdir("loader", 0755)
@@ -126,14 +125,12 @@ var initCmd = cli.Command{
 		createFile(ctx, "schema.graphql", gqlSchemaDefault)
 		createFile(ctx, "gqlgen.yml", gqlConfigDefault)
 		createFile(ctx, "docker-compose.yml", dockerComposeDefault)
-		copyTemplate("migrations/001-base.sql", "migrations/001-base.sql")
+		copyTemplateFolder("migrations", "migrations")
 		createFileFromTemplate("gnorm.toml", "gnorm.toml")
 		createFileFromTemplate("config.yaml", "config.yaml")
 
 		// OPA policy related files
-		_ = os.MkdirAll("policies/bundle/api/entity", 0755)
-		_ = os.MkdirAll("policies/bundle/api/mutation", 0755)
-		_ = os.MkdirAll("policies/bundle/api/query", 0755)
+		copyTemplateFolder("policies", "policies")
 
 		generateGQL(ctx)
 		createFileFromTemplate("server.go", "server.go")

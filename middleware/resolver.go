@@ -29,11 +29,37 @@ func CheckAccess(ctx context.Context, prefix string, object string, input map[st
 	return opa.Authorised(ctx, getAuthString(prefix, object, "access"), input)
 }
 
+// CheckAllowed Checks whether user is allowed to perform the requested mutation
+func CheckAllowed(ctx context.Context, prefix string, objectName string, input map[string]interface{}) error {
+	allowed, err := opa.Authorised(ctx, getAuthString(prefix, objectName, "allow"), input)
+
+	if err != nil {
+		return err
+	}
+
+	if !allowed {
+		return permissionDeniedError(fmt.Sprintf("%s.%s", prefix, objectName))
+	}
+
+	return nil
+}
+
+// mergeMap Merges the values in b into a
+func mergeMap(a map[string]interface{}, b map[string]interface{}) {
+	for k, v := range b {
+		a[k] = v
+	}
+}
+
+func permissionDeniedError(objectName string) error {
+	return fmt.Errorf("Not authorised to access %s", objectName)
+}
+
 // ResolverMiddleware Customise resolver middleware and include opentracing
 // Performs multiple authorisation checks
 func ResolverMiddleware(
 	defaultPayloadFunc func(context.Context, map[string]interface{}) error,
-	requestPayloadFunc func(context.Context, string, string, interface{}) error,
+	requestPayloadFunc func(context.Context, string, string, map[string]interface{}) error,
 ) graphql.FieldMiddleware {
 	opentracingMiddleware := OpentracingResolverMiddleware()
 	defaultPayload := defaultPayloadFunc
@@ -57,10 +83,20 @@ func ResolverMiddleware(
 		// PRE-FUNCTION CHECK: If this is a root level mutation, run the core 'allow' check:
 		var err error
 		if rctx.Object == "Mutation" {
-			err = requestPayload(ctx, strings.ToLower(rctx.Object), rctx.Field.Name, rctx.Args)
+			err := runAllowCheck(ctx, requestPayload, rctx, rctx.Args)
 			if err != nil {
 				return nil, err
 			}
+			//	input, err := requestPayload(ctx, strings.ToLower(rctx.Object), rctx.Field.Name, rctx.Args)
+			//	if err != nil {
+			//		return nil, err
+			//	}
+
+			//	mergeMap(input, rctx.Args)
+			//	err = CheckAllowed(ctx, strings.ToLower(rctx.Object), rctx.Field.Name, input)
+			//	if err != nil {
+			//		return nil, err
+			//	}
 		}
 
 		// Run the resolvers
@@ -77,7 +113,8 @@ func ResolverMiddleware(
 
 		// POST-FUNCTION CHECK: If this is a root level mutation, run the core 'allow' check:
 		if rctx.Object == "Query" {
-			err = requestPayload(ctx, strings.ToLower(rctx.Object), rctx.Field.Name, res)
+			err = runAllowCheck(ctx, requestPayload, rctx, res)
+			// err = requestPayload(ctx, strings.ToLower(rctx.Object), rctx.Field.Name, res)
 			if err != nil {
 				return nil, err
 			}
@@ -111,6 +148,30 @@ func ResolverMiddleware(
 
 		return res, err
 	}
+}
+
+func runAllowCheck(
+	ctx context.Context,
+	requestPayload func(context.Context, string, string, map[string]interface{}) error,
+	rctx *graphql.ResolverContext,
+	data interface{},
+) error {
+	input := make(map[string]interface{})
+
+	dataMap, ok := data.(map[string]interface{})
+	if ok {
+		mergeMap(input, dataMap)
+	} else {
+		input["entity"] = data
+	}
+	mergeMap(input, rctx.Args)
+
+	err := requestPayload(ctx, strings.ToLower(rctx.Object), rctx.Field.Name, input)
+	if err != nil {
+		return err
+	}
+
+	return CheckAllowed(ctx, strings.ToLower(rctx.Object), rctx.Field.Name, input)
 }
 
 // OpentracingResolverMiddleware Taken from an older version of gqlgen

@@ -117,6 +117,8 @@ func copyTemplateFolder(source string, destination string) {
 		panic("No caller information")
 	}
 
+	_ = os.Mkdir(destination, 0755)
+
 	files, err := ioutil.ReadDir(path.Dir(filename) + "/static/" + source)
 
 	if err != nil {
@@ -124,7 +126,9 @@ func copyTemplateFolder(source string, destination string) {
 	}
 
 	for _, f := range files {
-		if !f.IsDir() {
+		if f.IsDir() {
+			copyTemplateFolder(source+"/"+f.Name(), destination+"/"+f.Name())
+		} else {
 			copyTemplate(source+"/"+f.Name(), destination+"/"+f.Name())
 		}
 	}
