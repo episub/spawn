@@ -6,17 +6,16 @@ name: TODO
 
 * Implement field level permission checks for create actions
 * Change string field names to a new type so we can explicitly require them
-* Eliminate the two-step paginated query steps
+* Optimisation: Eliminate the two-step paginated query steps in templates
 * Remove files in cmd/static/gnorm if not used.  db.go is not, I think
-* Replace Gnorm based where clauses with squirrel?  https://github.com/Masterminds/squirrel or https://github.com/doug-martin/ or https://github.com/ulule/loukoum
 * Batched queries:
     * Don't have db as a parameter when it's not even used
     * Have a non-batched option that can be used for transactions
 * Update all return values in `cmd/static/loader/gen.gotmpl`  to return sanitised errors
 * Allow modification of all the template files, like with gnorm
-* Instead of map, use a structural, with a string array naming the fields that are provided or to be updated, to allow us to distinguish between 'no change' vs 'null this field'.
+* Instead of map, consider using a struct, with a string array naming the fields that are provided or to be updated, to allow us to distinguish between 'no change' vs 'null this field'.
 * Obfuscate cursor in pagination
 * Simplify the config so that some parts (ModelPackageShort) can be automatically calculated when not provided
 * Consider a migration tool like goose, sql-migrate, mattes/migrate
 * Automatic generate docs for auto gen code
-* Provide hydrate function with db connection and return error
+* Provide hydrate function with db connection and have it return error
