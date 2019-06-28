@@ -20,22 +20,6 @@ var lettersSpacesAndNumbersRx = regexp.MustCompile(`^[- 'a-zA-ZÀ-ÖØ-öø-ÿ0-
 var urlRx = regexp.MustCompile(`^(http:\/\/www\.|https:\/\/www\.|http:\/\/|https:\/\/)?[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,5}(:[0-9]{1,5})?(\/.*)?$`)
 var aTrueRx = regexp.MustCompile(`^true$`)
 
-// PasswordValidator Provides some base regexps for enforcing password policy
-// https://stackoverflow.com/questions/19605150/regex-for-password-must-contain-at-least-eight-characters-at-least-one-number-a
-type PasswordValidator struct {
-	Failure string
-	Regex   string
-}
-
-var (
-	// PasswordUpperLowerNumber Ensures password contains at least one upper,
-	// lower, and number
-	PasswordUpperLowerNumber = PasswordValidator{
-		Failure: "Password must contain at least one upper case character, one lower, and one number, with a minium length of %d",
-		Regex:   `^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{%d,}$`,
-	}
-)
-
 // Regex Confirms that value matches the provided regex
 func Regex(ctx context.Context, rx *regexp.Regexp, field string, value string, message string) bool {
 	if !rx.MatchString(value) {
@@ -100,19 +84,6 @@ func MinimumLength(ctx context.Context, n int, v string, field string) bool {
 		return false
 	}
 	return true
-}
-
-// Password Checks the password for the given validator
-func Password(
-	ctx context.Context,
-	password string,
-	minLength uint,
-	validator PasswordValidator,
-	field string,
-) bool {
-	rx := regexp.MustCompile(fmt.Sprintf(string(validator.Regex), minLength))
-
-	return Regex(ctx, rx, field, password, fmt.Sprintf(validator.Failure, minLength))
 }
 
 // StringsNotEqual Verifies that the two provided values are not equal
