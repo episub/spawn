@@ -32,6 +32,10 @@ var PasswordUpperLowerNumberTests = []passwordTest{
 		Password: "2iJo$",
 		Accept:   true,
 	},
+	{
+		Password: "OIJoijoij123",
+		Accept:   true,
+	},
 }
 
 var passwordTests = []struct {

@@ -42,7 +42,7 @@ func (l *PostgresLoader) One{{.ModelName}}(ctx context.Context, where []sq.Sqliz
 
 	o = hydrateModel{{.ModelName}}(ctx, r)
 
-	return o, err
+	return o, sanitiseError(err)
 }
 
 
