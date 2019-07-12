@@ -7,6 +7,7 @@ require (
 	github.com/99designs/gqlgen v0.9.0
 	github.com/OneOfOne/xxhash v1.2.5 // indirect
 	github.com/armon/go-metrics v0.0.0-20190430140413-ec5e00d3c878
+	github.com/bep/mapstructure v0.0.0-20180511142126-bb74f1db0675
 	github.com/caarlos0/env v3.5.0+incompatible
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
 	github.com/codemodus/kace v0.5.1
@@ -19,7 +20,8 @@ require (
 	github.com/gofrs/uuid v3.2.0+incompatible
 	github.com/hokaccha/go-prettyjson v0.0.0-20180920040306-f579f869bbfe
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
-	github.com/lib/pq v1.0.0 // indirect
+	github.com/jackc/pgx v3.5.0+incompatible
+	github.com/lib/pq v1.0.0
 	github.com/mattn/go-colorable v0.1.1 // indirect
 	github.com/mattn/go-isatty v0.0.8 // indirect
 	github.com/mattn/go-runewidth v0.0.4 // indirect
