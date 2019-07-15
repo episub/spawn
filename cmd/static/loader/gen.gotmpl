@@ -5,6 +5,10 @@ package loader
 
 {{- $package := toLower .ModelName}}
 {{- $struct := printf "%s.Row" $package}}
+{{- $fullStr := ""}}
+{{if .Versioned}}
+	{{$fullStr = "Full"}}
+{{end}}
 
 import (
 	"{{.Config.PackageName}}/models"
@@ -26,7 +30,7 @@ type {{.ModelName}}FetchRequest struct {
 
 // {{.ModelName}}FetchReply A reply with the requested object or an error
 type {{.ModelName}}FetchReply struct {
-	Row {{$package}}.Row
+	Row {{$package}}.{{$fullStr}}Row
 	Error  error
 }
 
@@ -39,7 +43,7 @@ func (l *PostgresLoader) One{{.ModelName}}(ctx context.Context, where []sq.Sqliz
 	span, ctx := opentracing.StartSpanFromContext(ctx, "One{{.ModelName}}")
 	defer span.Finish()
 
-	r, err := {{$package}}.One(ctx, l.pool, where, order)
+	r, err := {{$package}}.One{{$fullStr}}(ctx, l.pool, where, order)
 
 	o = hydrateModel{{.ModelName}}(ctx, r)
 
@@ -70,7 +74,7 @@ func (l *PostgresLoader) get{{.ModelName}}(ctx context.Context, id {{.PrimaryKey
 	return
 }
 
-func (l *PostgresLoader) batchedGet{{.ModelName}}(id {{.PrimaryKeyType}}, db gnorm.DB) (o {{$package}}.Row, err error) {
+func (l *PostgresLoader) batchedGet{{.ModelName}}(id {{.PrimaryKeyType}}, db gnorm.DB) (o {{$package}}.{{$fullStr}}Row, err error) {
 	{{camel .ModelName}}MX.RLock()
 	if !{{camel .ModelName}}Initialised {
 		err = fmt.Errorf("batchedGet{{.ModelName}} not initialised.  Add 'go loader.run{{.ModelName}}Batcher()' to init")
@@ -104,7 +108,7 @@ func (l *PostgresLoader) run{{.ModelName}}Batcher() {
 
 		{{camel .ModelName}}MX.Lock()
 		if len({{camel .ModelName}}FRs) > 0 {
-			var {{camel .ModelName}}s []{{$package}}.Row
+			var {{camel .ModelName}}s []{{$package}}.{{$fullStr}}Row
 			var err error
 			var ids []{{.PrimaryKeyType}}
 
@@ -112,12 +116,13 @@ func (l *PostgresLoader) run{{.ModelName}}Batcher() {
 				ids = append(ids, r.{{.ModelName}}ID)
 			}
 
-			{{camel .ModelName}}s, err = {{$package}}.Query(context.Background(), l.pool, []sq.Sqlizer{gnorm.In{{pascal .PrimaryKeyType}}({{$package}}.{{.PK}}Col, ids)})
+			{{camel .ModelName}}s, err = {{$package}}.Query{{$fullStr}}(context.Background(), l.pool, []sq.Sqlizer{gnorm.In{{pascal .PrimaryKeyType}}({{$package}}.{{.PK}}Col, ids)})
 
 		OUTER:
 			for _, r := range {{camel .ModelName}}FRs {
 				for _, c := range {{camel .ModelName}}s {
-					if c.{{.ModelName}}ID == r.{{.ModelName}}ID {
+					
+					if c.{{if .Versioned}}Parent.{{end}}{{.ModelName}}ID == r.{{.ModelName}}ID {
 						r.Reply <- {{.ModelName}}FetchReply{ Row: c, Error: nil}
 						continue OUTER
 					}
@@ -138,6 +143,8 @@ func (l *PostgresLoader) run{{.ModelName}}Batcher() {
 	}
 }
 
+{{if .Versioned}}
+{{else}}
 // GetAll{{.ModelName}} Returns an array of all {{.ModelName}} entries, using the provided filter
 // For an explanation on how the query works, and reversing orders, etc:
 // https://use-the-index-luke.com/sql/partial-results/fetch-next-page
@@ -186,6 +193,7 @@ func (l *PostgresLoader) GetAll{{.ModelName}}(ctx context.Context, filter models
 
 	return
 }
+{{end}}
 
 {{if .Create}}
 // Update{{.ModelName}} Updates {{.ModelName}} based on provided changes
@@ -206,11 +214,17 @@ func (l *PostgresLoader) Update{{.ModelName}}(ctx context.Context, id {{.Primary
 
 // update{{.ModelName}} Updates {{.ModelName}} based on provided changes using provided db connection
 func (l *PostgresLoader) update{{.ModelName}}(ctx context.Context, db gnorm.DB, id {{.PrimaryKeyType}}, u map[string]interface{}) error {
-	o, err := {{$package}}.Find(ctx, l.pool, id)
+	o, err := {{$package}}.Find{{$fullStr}}(ctx, l.pool, id)
 
 	if err != nil {
 		return err
 	}
+
+	{{if .Versioned}}
+	// Nullify the version ID so we ensure a new version entry is created each
+	// time:
+	o.Version.{{.ModelName}}VersionID = uuid.Nil
+	{{end}}
 
 	// Helps us keep track of which field has any errors
 	pathCtx := addPathToContext(ctx, kace.Snake("{{.ModelName}}"))
@@ -237,13 +251,13 @@ func (l *PostgresLoader) update{{.ModelName}}(ctx context.Context, db gnorm.DB, 
 		return nil
 	}
 
-	_, err = {{$package}}.Upsert(ctx, db, o)
+	_, err = {{$package}}.Upsert{{$fullStr}}(ctx, db, o)
 
 	return sanitiseError(err)
 }
 
 // create{{.PmName}} Creates {{.PmName}} from given input
-func (l *PostgresLoader) create{{.PmName}}(ctx context.Context, db gnorm.DB, i map[string]interface{}) (o {{$package}}.Row, err error) {
+func (l *PostgresLoader) create{{.PmName}}(ctx context.Context, db gnorm.DB, i map[string]interface{}) (o {{$package}}.{{$fullStr}}Row, err error) {
 	span, ctx := opentracing.StartSpanFromContext(ctx, "create{{.PmName}}")
 	defer span.Finish()
 
@@ -270,29 +284,8 @@ func (l *PostgresLoader) create{{.PmName}}(ctx context.Context, db gnorm.DB, i m
 		return o, nil
 	}
 
-	o, err = {{$package}}.Upsert(ctx, db, o)
+	o, err = {{$package}}.Upsert{{$fullStr}}(ctx, db, o)
 
 	return o, sanitiseError(err)
 }
-{{end}}
-
-{{if .Versioned}}
-// Get{{.ModelName}}Full Returns the item based on the parent record and the
-// latest child
-func (l *PostgresLoader) Get{{.ModelName}}Full(ctx context.Context, id {{.PrimaryKeyType}}) (o {{.ModelStruct}}, err error) {
-	full, err := {{$package}}.FindFull(ctx, l.pool, id)
-
-	if err != nil {
-		return o, sanitiseError(err)
-	}
-
-	o =  hydrateModel{{.ModelName}}Full(ctx, full)
-
-	return o, nil
-}
-
-{{if .Create}}
-
-{{end}}
-
 {{end}}
