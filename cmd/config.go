@@ -43,6 +43,7 @@ type PostgresGenerate struct {
 	PK             string `yaml:"primaryKey"`     // Go struct for database name for primary key field
 	PrimaryKeyType string `yaml:"primaryKeyType"` // Go type for primary key
 	Create         bool   `yaml:"create"`         // Generate create/update related functions
+	Versioned      bool   `yaml:"versioned"`      // If this has version related tables, create relevant functions
 }
 
 func readConfig(filename string) (Config, error) {

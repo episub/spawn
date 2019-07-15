@@ -392,7 +392,7 @@ func One{{$element}}(ctx context.Context, db {{$rootPkg}}.DB, where []sq.Sqlizer
 
 // Upsert Creates or updates record based on input
 func Upsert(ctx context.Context, db gnorm.DB, o Row) (Row, error) {
-	span, _ := opentracing.StartSpanFromContext(ctx, "Upsert{{.Table.Name}}")
+	span, _ := opentracing.StartSpanFromContext(ctx, "Upsert_{{.Table.Name}}")
 	defer span.Finish()
 
 	var err error
@@ -420,6 +420,27 @@ func Upsert(ctx context.Context, db gnorm.DB, o Row) (Row, error) {
 
 	return o,nil
 }
+
+{{- if $child}}
+// UpsertFull Creates or updates record based on input for both parent and
+// child record
+func UpsertFull(ctx context.Context, db gnorm.DB, o FullRow) (FullRow, error) {
+	span, _ := opentracing.StartSpanFromContext(ctx, "UpsertFull_{{.Table.Name}}")
+	defer span.Finish()
+
+	var err error
+
+	// Upsert the main record:
+	o.Parent, err = Upsert(ctx, db, o.Parent)
+	if err != nil {
+		return o, err
+	}
+
+	// Upsert the child record:
+	o.Version, err = {{toLower $child.Name}}.Upsert(ctx, db, o.Version)
+	return o, err
+}
+{{end}}
 
 {{if .Table.HasPrimaryKey }}
 // Delete deletes the Row from the database. Returns the number of items deleted.
