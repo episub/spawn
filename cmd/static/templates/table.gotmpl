@@ -453,7 +453,6 @@ func BatchInsert(ctx context.Context, db gnorm.DB, rows []Row) error {
 		// Append the args:
 		{{- range $index, $element := .Table.Columns.Names.Sorted}}
 		args[globalIndex] = o.{{ $element }}
-		fmt.Printf("\nIndex: %d\n", index)
 		argNumbers[index] = fmt.Sprintf("%d", globalIndex+1)
 		globalIndex++
 		index++
@@ -467,8 +466,6 @@ func BatchInsert(ctx context.Context, db gnorm.DB, rows []Row) error {
 	var sqlstr = `INSERT INTO {{$schema}}.{{$table}} (` +
 		`{{ join .Table.Columns.DBNames.Sorted ", " }}` +
 		`) VALUES ` + strings.Join(inserts, ", ")
-
-	fmt.Printf("Query: %s\n", sqlstr)
 
 	// run query
 	_, err = db.Exec(sqlstr, args...)
