@@ -58,7 +58,7 @@ func permissionDeniedError(objectName string) error {
 // ResolverMiddleware Customise resolver middleware and include opentracing
 // Performs multiple authorisation checks
 func ResolverMiddleware(
-	defaultPayloadFunc func(context.Context, map[string]interface{}) error,
+	defaultPayloadFunc func(context.Context, string, string, map[string]interface{}) error,
 	requestPayloadFunc func(context.Context, string, string, map[string]interface{}) error,
 ) graphql.FieldMiddleware {
 	opentracingMiddleware := OpentracingResolverMiddleware()
@@ -202,7 +202,7 @@ func OpentracingResolverMiddleware() graphql.FieldMiddleware {
 }
 
 // hasFieldAccess Verify access to the requested query field
-func hasFieldAccess(ctx context.Context, object interface{}, defaultPayload func(context.Context, map[string]interface{}) error) (bool, error) {
+func hasFieldAccess(ctx context.Context, object interface{}, defaultPayload func(context.Context, string, string, map[string]interface{}) error) (bool, error) {
 	span, ctx := opentracing.StartSpanFromContext(ctx, "hasFieldAccess")
 	defer span.Finish()
 
@@ -243,7 +243,14 @@ func hasFieldAccess(ctx context.Context, object interface{}, defaultPayload func
 			parent = rctx.Parent.Result
 		}
 
-		setFieldInput(ctx, object, parent, input, defaultPayload)
+		// Add some default data to the check
+		input["fieldValue"] = object
+		input["entity"] = parent
+
+		err = defaultPayload(ctx, rctx.Object, rctx.Field.Alias, input)
+		if err != nil {
+			log.Printf("WARNING: Could not add default payload: %s", err)
+		}
 
 		allowed, err = opa.Authorised(ctx, policy, input)
 
@@ -260,23 +267,6 @@ func hasFieldAccess(ctx context.Context, object interface{}, defaultPayload func
 	}
 
 	return allowed, err
-}
-
-// setFieldInput Sets some standard data for entity/field level policy decisions
-func setFieldInput(
-	ctx context.Context,
-	field interface{},
-	entity interface{},
-	input map[string]interface{},
-	defaultPayloadFunc func(context.Context, map[string]interface{}) error,
-) {
-	input["fieldValue"] = field
-	input["entity"] = entity
-
-	err := defaultPayloadFunc(ctx, input)
-	if err != nil {
-		log.Printf("WARNING: Could not add default payload: %s", err)
-	}
 }
 
 // fullFieldList Returns a list of the fields/names in the query.  E.g., getting the username of a user for a client would return 'client user username' as the three elements in order.  Does not count array position counts
