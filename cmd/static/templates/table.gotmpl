@@ -177,10 +177,19 @@ func CountQuery(ctx context.Context, db gnorm.DB, where []sq.Sqlizer) (int, erro
 
 {{range $index, $element := $tables}}
 // Query{{$element}} retrieves rows from '{{ $table }}' as a slice of Row.
-func Query{{$element}}(ctx context.Context, db {{$rootPkg}}.DB, where []sq.Sqlizer) ([]{{$element}}Row, error) {
+func Query{{$element}}(
+	ctx context.Context,
+	db {{$rootPkg}}.DB,
+	where []sq.Sqlizer,
+	order *gnorm.Order,
+) ([]{{$element}}Row, error) {
 	qry := gnorm.Qry().Select({{$element}}Select)
 	for _, w := range where {
 		qry = qry.Where(w)
+	}
+
+	if order != nil {
+		qry = qry.OrderBy(order.String())
 	}
 
 	sqlstr, args, err := qry.ToSql()
@@ -290,7 +299,7 @@ func QueryPaginated(ctx context.Context, db gnorm.DB, cursor *string, where []sq
 		return
 	}
 
-	fetched, err := Query(ctx, db, []sq.Sqlizer{gnorm.In{{pascal $primaryKey.Type}}({{$primaryKey.Name}}Col, fetchIDs)})
+	fetched, err := Query(ctx, db, []sq.Sqlizer{gnorm.In{{pascal $primaryKey.Type}}({{$primaryKey.Name}}Col, fetchIDs)}, nil)
 
 	// Now create vals:
 	vals = make([]Row, len(fetchIDs))

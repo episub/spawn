@@ -50,6 +50,36 @@ func (l *PostgresLoader) One{{.ModelName}}(ctx context.Context, where []sq.Sqliz
 	return o, sanitiseError(err)
 }
 
+// Query{{.ModelName}} Returns array of {{.ModelName}} based on provided
+// query conditions
+func (l *PostgresLoader) Query{{.ModelName}}(
+	ctx context.Context,
+	where []sq.Sqlizer,
+	order gnorm.Order,
+) (models []{{.ModelStruct}}, err error) {
+	rows, err := {{$package}}.Query{{$fullStr}}(ctx, l.pool, where, &order)
+
+	if err != nil {
+		return
+	}
+
+	models, err = hydrate{{.ModelName}}Rows(ctx, rows)
+
+	return models, err
+}
+
+func hydrate{{.ModelName}}Rows(
+	ctx context.Context,
+	rows []{{$package}}.{{$fullStr}}Row,
+) ([]{{.ModelStruct}}, error) {
+	reply := make([]{{.ModelStruct}}, len(rows))
+
+	for i, row := range rows {
+		reply[i] = hydrateModel{{.ModelName}}(ctx, row)
+	}
+
+	return reply, nil
+}
 
 // Get{{.ModelName}} Returns {{.ModelName}} with given ID
 {{- $idName := snake .ModelName}}
@@ -116,7 +146,7 @@ func (l *PostgresLoader) run{{.ModelName}}Batcher() {
 				ids = append(ids, r.{{.ModelName}}ID)
 			}
 
-			{{camel .ModelName}}s, err = {{$package}}.Query{{$fullStr}}(context.Background(), l.pool, []sq.Sqlizer{gnorm.In{{pascal .PrimaryKeyType}}({{$package}}.{{.PK}}Col, ids)})
+			{{camel .ModelName}}s, err = {{$package}}.Query{{$fullStr}}(context.Background(), l.pool, []sq.Sqlizer{gnorm.In{{pascal .PrimaryKeyType}}({{$package}}.{{.PK}}Col, ids)}, nil)
 
 		OUTER:
 			for _, r := range {{camel .ModelName}}FRs {
