@@ -38,12 +38,13 @@ import (
 	{{- if $child}}
 	"{{.Params.RootImport}}/{{toLower .Table.Schema.Name}}/{{toLower $child.Name}}"
 	{{- end}}
-	sq "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx"
-	uuid "github.com/gofrs/uuid"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/lib/pq"
 	"github.com/opentracing/opentracing-go/log"
 	"github.com/pkg/errors"
+	opentracing "github.com/opentracing/opentracing-go"
+	sq "github.com/Masterminds/squirrel"
+	uuid "github.com/gofrs/uuid"
 )
 
 // TableName is the primary table that this particular gnormed file deals with.
@@ -429,6 +430,55 @@ func Upsert(ctx context.Context, db gnorm.DB, o Row) (Row, error) {
 
 	return o,nil
 }
+
+// BatchInsert Creates provided entries in one attempt
+func BatchInsert(ctx context.Context, db gnorm.DB, rows []Row) error {
+	span, _ := opentracing.StartSpanFromContext(ctx, "BatchInsert_{{.Table.Name}}")
+	defer span.Finish()
+
+	args := make([]interface{}, {{len .Table.Columns}} * len(rows))
+	inserts := make([]string, len(rows))
+
+	var err error
+	for i, o := range rows {
+		if err = prepareCreate(ctx, &o); err != nil {
+			return err
+		}
+
+		argNumbers := make([]string, {{len .Table.Columns}})
+
+		globalIndex := i * {{len .Table.Columns}}
+		index := 0
+
+		// Append the args:
+		{{- range $index, $element := .Table.Columns.Names.Sorted}}
+		args[globalIndex] = o.{{ $element }}
+		fmt.Printf("\nIndex: %d\n", index)
+		argNumbers[index] = fmt.Sprintf("%d", globalIndex+1)
+		globalIndex++
+		index++
+		{{end -}}
+
+		// Add the value
+		inserts[i] = fmt.Sprintf("($%s)", strings.Join(argNumbers, ", $"))
+	}
+
+	// sql query
+	var sqlstr = `INSERT INTO {{$schema}}.{{$table}} (` +
+		`{{ join .Table.Columns.DBNames.Sorted ", " }}` +
+		`) VALUES ` + strings.Join(inserts, ", ")
+
+	fmt.Printf("Query: %s\n", sqlstr)
+
+	// run query
+	_, err = db.Exec(sqlstr, args...)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 
 {{- if $child}}
 // UpsertFull Creates or updates record based on input for both parent and
