@@ -44,8 +44,12 @@ func (l *PostgresLoader) One{{.ModelName}}(ctx context.Context, where []sq.Sqliz
 	defer span.Finish()
 
 	r, err := {{$package}}.One{{$fullStr}}(ctx, l.pool, where, order)
+	
+	if err != nil {
+		return o, sanitiseError(err)
+	}
 
-	o = hydrateModel{{.ModelName}}(ctx, r)
+	o, err = hydrateModel{{.ModelName}}(ctx, l.pool, r)
 
 	return o, sanitiseError(err)
 }
@@ -63,19 +67,24 @@ func (l *PostgresLoader) Query{{.ModelName}}(
 		return
 	}
 
-	models, err = hydrate{{.ModelName}}Rows(ctx, rows)
+	models, err = hydrate{{.ModelName}}Rows(ctx, l.pool, rows)
 
 	return models, err
 }
 
 func hydrate{{.ModelName}}Rows(
 	ctx context.Context,
+	db gnorm.DB,
 	rows []{{$package}}.{{$fullStr}}Row,
 ) ([]{{.ModelStruct}}, error) {
 	reply := make([]{{.ModelStruct}}, len(rows))
 
+	var err error
 	for i, row := range rows {
-		reply[i] = hydrateModel{{.ModelName}}(ctx, row)
+		reply[i], err = hydrateModel{{.ModelName}}(ctx, db, row)
+		if err != nil {
+			return reply, err
+		}
 	}
 
 	return reply, nil
@@ -99,7 +108,7 @@ func (l *PostgresLoader) get{{.ModelName}}(ctx context.Context, id {{.PrimaryKey
 		return
 	}
 
-	o = hydrateModel{{.ModelName}}(ctx, r)
+	o, err = hydrateModel{{.ModelName}}(ctx, db, r)
 
 	return
 }
@@ -218,7 +227,11 @@ func (l *PostgresLoader) GetAll{{.ModelName}}(ctx context.Context, filter models
 
 	all = make([]{{.ModelStruct}}, len(r))
 	for i, b := range r {
-		all[i] = hydrateModel{{.ModelName}}(ctx, b)
+		all[i], err = hydrateModel{{.ModelName}}(ctx, l.pool, b)
+		if err != nil {
+			err = sanitiseError(err)
+			return
+		}
 	}
 
 	return
