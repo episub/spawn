@@ -38,6 +38,7 @@ var {{camel .ModelName}}Initialised bool
 var {{camel .ModelName}}FRs []{{.ModelName}}FetchRequest
 var {{camel .ModelName}}MX sync.RWMutex
 
+{{if .Query}}
 // One{{.ModelName}} Returns a single {{.ModelName}} with the given where clauses and order
 func (l *PostgresLoader) One{{.ModelName}}(ctx context.Context, where []sq.Sqlizer, order *gnorm.Order) (o {{.ModelStruct}}, err error) {
 	span, ctx := opentracing.StartSpanFromContext(ctx, "One{{.ModelName}}")
@@ -72,6 +73,69 @@ func (l *PostgresLoader) Query{{.ModelName}}(
 	return models, err
 }
 
+// Get{{.ModelName}} Returns {{.ModelName}} with given ID
+{{- $idName := snake .ModelName}}
+func (l *PostgresLoader) Get{{.ModelName}}(ctx context.Context, id {{.PrimaryKeyType}}) (o {{.ModelStruct}}, err error) {
+	return l.get{{.ModelName}}(ctx, id, l.pool)
+}
+
+{{if .Versioned}}
+{{else}}
+// GetAll{{.ModelName}} Returns an array of all {{.ModelName}} entries, using the provided filter
+// For an explanation on how the query works, and reversing orders, etc:
+// https://use-the-index-luke.com/sql/partial-results/fetch-next-page
+func (l *PostgresLoader) GetAll{{.ModelName}}(ctx context.Context, filter models.Filter) (all []{{.ModelStruct}}, pi models.PageInfo, count int, err error) {
+	span, ctx := opentracing.StartSpanFromContext(ctx, "GetAll{{.ModelName}}")
+	defer span.Finish()
+
+	descending := filter.Order.Descending
+	// If filter.Before, we reverse the order of the results now:
+	if filter.Before {
+		filter.Order.Descending = !descending
+	}
+
+	r, hasMore, count, err := {{$package}}.QueryPaginated(ctx, l.pool, filter.Cursor, filter.Where, filter.Order, filter.Count)
+
+	if err != nil {
+		return
+	}
+
+	// We may need to reverse the order back again if we swapped it:
+	if descending != filter.Order.Descending {
+		// Restore the order
+		for i := len(r)/2 - 1; i >= 0; i-- {
+			opp := len(r) - 1 - i
+			r[i], r[opp] = r[opp], r[i]
+		}
+	}
+
+	if filter.Before {
+		pi.HasPreviousPage = hasMore
+		if filter.Cursor != nil {
+			pi.HasNextPage = true
+		}
+	} else {
+		pi.HasNextPage = hasMore
+		if filter.Cursor != nil {
+			pi.HasPreviousPage = true
+		}
+	}
+
+
+	all = make([]{{.ModelStruct}}, len(r))
+	for i, b := range r {
+		all[i], err = hydrateModel{{.ModelName}}(ctx, l.pool, b)
+		if err != nil {
+			err = sanitiseError(err)
+			return
+		}
+	}
+
+	return
+}
+{{end}}
+{{end}}
+
 func hydrate{{.ModelName}}Rows(
 	ctx context.Context,
 	db gnorm.DB,
@@ -88,12 +152,6 @@ func hydrate{{.ModelName}}Rows(
 	}
 
 	return reply, nil
-}
-
-// Get{{.ModelName}} Returns {{.ModelName}} with given ID
-{{- $idName := snake .ModelName}}
-func (l *PostgresLoader) Get{{.ModelName}}(ctx context.Context, id {{.PrimaryKeyType}}) (o {{.ModelStruct}}, err error) {
-	return l.get{{.ModelName}}(ctx, id, l.pool)
 }
 
 // get{{.ModelName}} Returns {{.ModelName}} with given ID, using provided DB connection
@@ -181,62 +239,6 @@ func (l *PostgresLoader) run{{.ModelName}}Batcher() {
 		{{camel .ModelName}}MX.Unlock()
 	}
 }
-
-{{if .Versioned}}
-{{else}}
-// GetAll{{.ModelName}} Returns an array of all {{.ModelName}} entries, using the provided filter
-// For an explanation on how the query works, and reversing orders, etc:
-// https://use-the-index-luke.com/sql/partial-results/fetch-next-page
-func (l *PostgresLoader) GetAll{{.ModelName}}(ctx context.Context, filter models.Filter) (all []{{.ModelStruct}}, pi models.PageInfo, count int, err error) {
-	span, ctx := opentracing.StartSpanFromContext(ctx, "GetAll{{.ModelName}}")
-	defer span.Finish()
-
-	descending := filter.Order.Descending
-	// If filter.Before, we reverse the order of the results now:
-	if filter.Before {
-		filter.Order.Descending = !descending
-	}
-
-	r, hasMore, count, err := {{$package}}.QueryPaginated(ctx, l.pool, filter.Cursor, filter.Where, filter.Order, filter.Count)
-
-	if err != nil {
-		return
-	}
-
-	// We may need to reverse the order back again if we swapped it:
-	if descending != filter.Order.Descending {
-		// Restore the order
-		for i := len(r)/2 - 1; i >= 0; i-- {
-			opp := len(r) - 1 - i
-			r[i], r[opp] = r[opp], r[i]
-		}
-	}
-
-	if filter.Before {
-		pi.HasPreviousPage = hasMore
-		if filter.Cursor != nil {
-			pi.HasNextPage = true
-		}
-	} else {
-		pi.HasNextPage = hasMore
-		if filter.Cursor != nil {
-			pi.HasPreviousPage = true
-		}
-	}
-
-
-	all = make([]{{.ModelStruct}}, len(r))
-	for i, b := range r {
-		all[i], err = hydrateModel{{.ModelName}}(ctx, l.pool, b)
-		if err != nil {
-			err = sanitiseError(err)
-			return
-		}
-	}
-
-	return
-}
-{{end}}
 
 {{if .Create}}
 // Update{{.ModelName}} Updates {{.ModelName}} based on provided changes

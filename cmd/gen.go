@@ -326,6 +326,7 @@ func postgresBuild(config Config, folder string) error {
 			PK             string
 			PrimaryKeyType string
 			Create         bool
+			Query          bool
 			Versioned      bool
 		}{
 			Config:         config,
@@ -337,6 +338,7 @@ func postgresBuild(config Config, folder string) error {
 			PK:             b.PK,
 			PrimaryKeyType: b.PrimaryKeyType,
 			Create:         b.Create,
+			Query:          b.Query,
 			Versioned:      b.Versioned,
 		})
 		f.Close()
