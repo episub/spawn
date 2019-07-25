@@ -27,6 +27,21 @@ func GetNullString(val *string) (ns sql.NullString) {
 	return
 }
 
+func GetNullUUID(val *uuid.UUID) (ns uuid.NullUUID) {
+	if val == nil {
+		return
+	}
+
+	if *val == uuid.Nil {
+		return
+	}
+
+	ns.UUID = *val
+	ns.Valid = true
+
+	return
+}
+
 func GetPointerString(val sql.NullString) *string {
 	if !val.Valid {
 		return nil
