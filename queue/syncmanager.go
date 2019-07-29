@@ -59,8 +59,9 @@ func (s *SyncManager) Run() {
 			action := s.getRegisteredAction(task.Name)
 
 			if action == nil {
-				s.errorHandler(fmt.Errorf("Cancelling task with ID %s because there is no action to handle it", task.id))
-				err = s.driver.cancel(task.id)
+				err = fmt.Errorf("Cancelling task with ID %s because there is no action to handle it", task.id)
+				s.errorHandler(err)
+				err = s.driver.cancel(task.id, err.Error())
 				if err != nil {
 					s.errorHandler(err)
 				}
@@ -73,9 +74,9 @@ func (s *SyncManager) Run() {
 
 					switch result {
 					case TaskResultPermanentFailure:
-						err = s.driver.fail(task.id)
+						err = s.driver.fail(task.id, message)
 					case TaskResultRetryFailure:
-						err = s.driver.retry(task.id)
+						err = s.driver.retry(task.id, message)
 					default:
 						err = fmt.Errorf("Undefined task result %s", result)
 					}
@@ -85,7 +86,7 @@ func (s *SyncManager) Run() {
 					}
 				case TaskResultSuccess:
 					// Complete the task
-					err = s.driver.complete(task.id)
+					err = s.driver.complete(task.id, message)
 					if err != nil {
 						s.errorHandler(err)
 					}

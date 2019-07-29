@@ -7,5 +7,5 @@ type ScheduledAction interface {
 
 // TaskAction An action to perform given some task in the task queue
 type TaskAction interface {
-	Do(task Task) (TaskResult, TaskMessage) // Perform the action for the task
+	Do(task Task) (TaskResult, string) // Perform the action for the task
 }

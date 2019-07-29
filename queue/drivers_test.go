@@ -223,7 +223,7 @@ func TestCompleteTask(t *testing.T) {
 
 		// Mark task as completed:
 
-		err = d.complete(task.id)
+		err = d.complete(task.id, "None")
 
 		if err != nil {
 			t.Error(err)
@@ -313,7 +313,7 @@ func TestPopNotDoneYet(t *testing.T) {
 
 		// Mark task as completed:
 
-		err = d.complete(task.id)
+		err = d.complete(task.id, "None")
 
 		if err != nil {
 			t.Error(err)
@@ -377,7 +377,7 @@ func TestCancelTask(t *testing.T) {
 
 		// Mark task as cancelled:
 
-		err = d.cancel(task.id)
+		err = d.cancel(task.id, "Cancelled")
 
 		if err != nil {
 			t.Error(err)
@@ -440,7 +440,7 @@ func TestFailTask(t *testing.T) {
 
 		// Mark task as failed:
 
-		err = d.fail(task.id)
+		err = d.fail(task.id, "Cancelled")
 
 		if err != nil {
 			t.Error(err)
@@ -520,7 +520,7 @@ func TestTaskOrders(t *testing.T) {
 				panic("afwe")
 			}
 
-			err = d.complete(fetched.id)
+			err = d.complete(fetched.id, "Completed")
 
 			if err != nil {
 				t.Error(err)
@@ -557,7 +557,7 @@ func TestTaskRetry(t *testing.T) {
 		}
 
 		// Now we set this task as marked for retry:
-		err = d.retry(task.id)
+		err = d.retry(task.id, "Retry")
 
 		if err != nil {
 			t.Error(err)

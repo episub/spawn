@@ -138,24 +138,24 @@ func (d *PostgresDriver) getQueueLength() (int64, error) {
 	return length, err
 }
 
-func (d *PostgresDriver) complete(id string) error {
-	return d.setTaskState(id, TaskDone)
+func (d *PostgresDriver) complete(id string, message string) error {
+	return d.setTaskState(id, TaskDone, message)
 }
 
-func (d *PostgresDriver) cancel(id string) error {
-	return d.setTaskState(id, TaskCancelled)
+func (d *PostgresDriver) cancel(id string, message string) error {
+	return d.setTaskState(id, TaskCancelled, message)
 }
 
-func (d *PostgresDriver) fail(id string) error {
-	return d.setTaskState(id, TaskFailed)
+func (d *PostgresDriver) fail(id string, message string) error {
+	return d.setTaskState(id, TaskFailed, message)
 }
 
-func (d *PostgresDriver) retry(id string) error {
-	return d.setTaskState(id, TaskRetry)
+func (d *PostgresDriver) retry(id string, message string) error {
+	return d.setTaskState(id, TaskRetry, message)
 }
 
-func (d *PostgresDriver) setTaskState(id string, state TaskState) error {
-	_, err := d.pool.Exec("UPDATE "+d.tableName+" SET state=$1, last_attempted=$2 WHERE "+d.tableName+"_id = $3", string(state), time.Now(), id)
+func (d *PostgresDriver) setTaskState(id string, state TaskState, message string) error {
+	_, err := d.pool.Exec("UPDATE "+d.tableName+" SET state=$1, last_attempted=$2, last_attempt_message=$3 WHERE "+d.tableName+"_id = $4", string(state), time.Now(), message, id)
 
 	return err
 }

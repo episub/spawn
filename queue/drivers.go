@@ -18,13 +18,13 @@ type Driver interface {
 	// refreshRetry Refreshes all tasks marked as retry that are older than the specified interval
 	refreshRetry(age time.Duration) error
 	// complete Marks a task as complete
-	complete(id string) error
+	complete(id string, message string) error
 	// cancel Marks a task as cancelled
-	cancel(id string) error
+	cancel(id string, message string) error
 	// fail Marks a task as permanently failed
-	fail(id string) error
+	fail(id string, message string) error
 	// retry Marks a task as temporarily failed and in need of a retry later
-	retry(id string) error
+	retry(id string, message string) error
 
 	getQueueLength() (int64, error)
 }
