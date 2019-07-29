@@ -38,6 +38,11 @@ import (
 	{{- if $child}}
 	"{{.Params.RootImport}}/{{toLower .Table.Schema.Name}}/{{toLower $child.Name}}"
 	{{- end}}
+	{{- if .Params.ExtraImports}}
+		{{- range .Params.ExtraImports}}
+		"{{.}}"
+		{{- end}}
+	{{- end}}
 	"github.com/jackc/pgx"
 	"github.com/lib/pq"
 	"github.com/opentracing/opentracing-go/log"

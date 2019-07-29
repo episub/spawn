@@ -110,7 +110,7 @@ RETURNING ` + d.taskQueryColumns()
 
 	err := d.pool.QueryRow(query).Scan(&task.id, &task.Key, &task.Name, &task.Created, &data, &task.State)
 
-	if err == sql.ErrNoRows {
+	if err == sql.ErrNoRows || err == pgx.ErrNoRows {
 		return task, ErrNoTasks
 	}
 
