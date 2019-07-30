@@ -11,17 +11,28 @@ import (
 
 // PostgresDriver PostgreSQL Driver
 type PostgresDriver struct {
-	tableName string
-	pool      *pgx.ConnPool
-	config    pgx.ConnConfig
+	tableName  string
+	schemaName string
+	pool       *pgx.ConnPool
+	config     pgx.ConnConfig
+}
+
+// schemaTable returns appropriate table+schema name
+func (p PostgresDriver) schemaTable() string {
+	if len(p.schemaName) > 0 {
+		return p.schemaName + "." + p.tableName
+	}
+
+	return p.tableName
 }
 
 // NewPostgresDriver Returns a new postgres driver, initialised.  readTimeout is in seconds
-func NewPostgresDriver(dbUser string, dbPass string, dbHost string, dbName string, dbTable string) (*PostgresDriver, error) {
+func NewPostgresDriver(dbUser string, dbPass string, dbHost string, dbName string, dbSchema string, dbTable string) (*PostgresDriver, error) {
 	var err error
 
 	d := &PostgresDriver{
-		tableName: dbTable,
+		tableName:  dbTable,
+		schemaName: dbSchema,
 	}
 
 	connString := fmt.Sprintf("user=%s dbname=%s password=%s host=%s sslmode=disable", dbUser, dbName, dbPass, dbHost)
@@ -48,7 +59,7 @@ func (d *PostgresDriver) taskQueryColumns() string {
 
 // clear Removes all entries from the queue.  Be careful.  Generally you should cancel entries rather than delete.
 func (d *PostgresDriver) clear() error {
-	_, err := d.pool.Exec(fmt.Sprintf("DELETE FROM %s", d.tableName))
+	_, err := d.pool.Exec(fmt.Sprintf("DELETE FROM %s", d.schemaTable()))
 
 	return err
 }
@@ -65,7 +76,7 @@ func (d *PostgresDriver) addTask(taskName string, taskKey string, data map[strin
 	created := time.Now()
 	// Convert
 	_, err = d.pool.Exec(`
-INSERT INTO `+d.tableName+`
+INSERT INTO `+d.schemaTable()+`
 	(`+d.tableName+`_id, data, state, task_key, task_name, created_at, last_attempted, last_attempt_message)
 VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'Created')`,
 		dataString,
@@ -83,7 +94,7 @@ func (d *PostgresDriver) getTask(taskName string) (Task, error) {
 	var task Task
 	var err error
 
-	query := `SELECT ` + d.taskQueryColumns() + ` FROM ` + d.tableName + ` WHERE task_name = $1 ORDER BY created_at DESC LIMIT 1`
+	query := `SELECT ` + d.taskQueryColumns() + ` FROM ` + d.schemaTable() + ` WHERE task_name = $1 ORDER BY created_at DESC LIMIT 1`
 
 	task, err = d.scanTask(d.pool.QueryRow(query))
 
@@ -95,10 +106,10 @@ func (d *PostgresDriver) pop() (Task, error) {
 	var data string
 
 	query := `
-UPDATE message_queue a SET last_attempted=Now(), last_attempt_message='Attempting', state='` + string(TaskInProgress) + `'
-WHERE message_queue_id IN (
-	SELECT message_queue_id
-	FROM message_queue
+UPDATE ` + d.schemaTable() + ` a SET last_attempted=Now(), last_attempt_message='Attempting', state='` + string(TaskInProgress) + `'
+WHERE ` + d.tableName + `_id IN (
+	SELECT ` + d.tableName + `_id
+	FROM ` + d.schemaTable() + `
 	WHERE state IN ('` + string(TaskReady) + `')
 	OR (
 		last_attempted < Now() - INTERVAL '10 minute'
@@ -125,7 +136,7 @@ RETURNING ` + d.taskQueryColumns()
 
 func (d *PostgresDriver) refreshRetry(age time.Duration) error {
 	when := time.Now().Add(-age)
-	_, err := d.pool.Exec("UPDATE "+d.tableName+" SET state=$1, last_attempted=$2 WHERE state=$3 AND last_attempted < $4", string(TaskReady), time.Now(), string(TaskRetry), when)
+	_, err := d.pool.Exec("UPDATE "+d.schemaTable()+" SET state=$1, last_attempted=$2 WHERE state=$3 AND last_attempted < $4", string(TaskReady), time.Now(), string(TaskRetry), when)
 
 	return err
 }
@@ -133,7 +144,7 @@ func (d *PostgresDriver) refreshRetry(age time.Duration) error {
 func (d *PostgresDriver) getQueueLength() (int64, error) {
 	var length int64
 
-	err := d.pool.QueryRow("SELECT count(*) FROM " + d.tableName + " LIMIT 1").Scan(&length)
+	err := d.pool.QueryRow("SELECT count(*) FROM " + d.schemaTable() + " LIMIT 1").Scan(&length)
 
 	return length, err
 }
@@ -155,7 +166,7 @@ func (d *PostgresDriver) retry(id string, message string) error {
 }
 
 func (d *PostgresDriver) setTaskState(id string, state TaskState, message string) error {
-	_, err := d.pool.Exec("UPDATE "+d.tableName+" SET state=$1, last_attempted=$2, last_attempt_message=$3 WHERE "+d.tableName+"_id = $4", string(state), time.Now(), message, id)
+	_, err := d.pool.Exec("UPDATE "+d.schemaTable()+" SET state=$1, last_attempted=$2, last_attempt_message=$3 WHERE "+d.tableName+"_id = $4", string(state), time.Now(), message, id)
 
 	return err
 }
