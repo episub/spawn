@@ -285,7 +285,7 @@ func PolicyMW(prefix string, objectName string, payload DefaultPayloadFunc) func
 			}
 
 			// Check allow policy:
-			err = CheckAllowed(ctx, p, o, input)
+			_, err = CheckAllowed(ctx, p, o, input)
 			if err != nil {
 				w.WriteHeader(http.StatusUnauthorized)
 				w.Write([]byte(err.Error()))

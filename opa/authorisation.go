@@ -22,6 +22,9 @@ type Permission struct {
 	Value bool   `json:"value"`
 }
 
+// ErrNoPolicy Returns when no such policy
+var ErrNoPolicy = fmt.Errorf("No such policy found")
+
 // AuthorisedStrings Returns a string list of strings that are authorised by the policy.  Expects to get from policy an array of strings
 func AuthorisedStrings(ctx context.Context, policy string, data map[string]interface{}) ([]string, error) {
 	//func AuthorisedStrings(ctx context.Context, policy string, store *store.DataStore, data map[string]interface{}) ([]string, error) {
@@ -103,13 +106,56 @@ func Allow(ctx context.Context, policy string, data map[string]interface{}) (boo
 	allowed, ok = rs[0].Expressions[0].Value.(bool)
 
 	if !ok {
-		return allowed, fmt.Errorf("Could not authorise action.  Return type: %s", reflect.TypeOf(rs[0].Expressions[0].Value))
+		return false, fmt.Errorf("Could not authorise action.  Return type: %s", reflect.TypeOf(rs[0].Expressions[0].Value))
 	}
 
 	return allowed, nil
 }
 
-//
+// Authorised Returns a true/false answer with a reason for a policy that
+// returns an object with both 'reason' and 'value' attributes.  If policy
+// does not exist, it returns ErrNoPolicy
+func Authorised(
+	ctx context.Context,
+	policy string,
+	data map[string]interface{},
+) (bool, string, error) {
+	span, ctx := opentracing.StartSpanFromContext(ctx, "Authorised")
+	defer span.Finish()
+
+	var allowed bool
+	var reason string
+
+	// Call the policy, and get our response
+	rs, err := runRego(ctx, policy, data)
+
+	if err != nil {
+		return allowed, reason, err
+	}
+
+	// Explicitly convert to array of interfaces, and all of those interfaces should be strings though we cannot cast directly to []string
+	var ok bool
+
+	// No such policy, but we just count that as false?
+	if (len(rs) < 1) || (len(rs[0].Expressions) < 1) {
+		return false, reason, ErrNoPolicy
+	}
+	reply, ok := rs[0].Expressions[0].Value.(map[string]interface{})
+
+	if !ok {
+		return false, reason, fmt.Errorf("Could not authorise action.  Return type: %s", reflect.TypeOf(rs[0].Expressions[0].Value))
+	}
+
+	allowed, ok = reply["value"].(bool)
+	if !ok {
+		return false, reason, fmt.Errorf("Expected value to be boolean, but was not")
+	}
+
+	// Don't care if this is missing, since reason should be optional
+	reason, _ = reply["reason"].(string)
+
+	return allowed, reason, nil
+}
 
 // GetInt Returns an integer given by the named policy
 func GetInt(ctx context.Context, policy string, data map[string]interface{}) (int64, error) {

@@ -34,19 +34,31 @@ func CheckAccess(ctx context.Context, prefix string, object string, input map[st
 	return opa.Allow(ctx, getAuthString(prefix, object, "access"), input)
 }
 
-// CheckAllowed Checks whether user is allowed to perform the requested mutation
-func CheckAllowed(ctx context.Context, prefix string, objectName string, input map[string]interface{}) error {
-	allowed, err := opa.Allow(ctx, getAuthString(prefix, objectName, "allow"), input)
+// CheckAllowed Checks whether user is allowed to perform the requested
+// mutation.  Returns the reason (which may be empty) and error (which may
+// also contain the reason text)
+func CheckAllowed(ctx context.Context, prefix string, objectName string, input map[string]interface{}) (string, error) {
+	// Attempt the authz policy first.  If we have an error, then we try allow
+	allowed, reason, err := opa.Authorised(ctx, getAuthString(prefix, objectName, "authz"), input)
 
 	if err != nil {
-		return err
+		log.WithField("error", err).Debug("Failed authz, so will attempt allow policy")
+		allowed, err = opa.Allow(ctx, getAuthString(prefix, objectName, "allow"), input)
+	}
+
+	if err != nil {
+		return reason, err
 	}
 
 	if !allowed {
-		return permissionDeniedError(fmt.Sprintf("%s.%s", prefix, objectName))
+		var msg string
+		if len(reason) > 0 {
+			msg = ": " + reason
+		}
+		return reason, permissionDeniedError(fmt.Sprintf("%s.%s%s", prefix, objectName, msg))
 	}
 
-	return nil
+	return reason, nil
 }
 
 // mergeMap Merges the values in b into a
@@ -91,9 +103,16 @@ func ResolverMiddleware(
 		// PRE-FUNCTION CHECK: If this is a root level mutation, run the core 'allow' check:
 		var err error
 		if rctx.Object == "Mutation" {
-			err := runAllowCheck(ctx, requestPayload, rctx, rctx.Args)
+			reason, err := runAllowCheck(ctx, requestPayload, rctx, rctx.Args)
 			if err != nil {
-				return nil, err
+				graphql.AddError(ctx, &gqlerror.Error{
+					Message: reason,
+					Extensions: map[string]interface{}{
+						"code":  "ALLOW_CHECK_FAIL",
+						"error": err.Error(),
+					},
+				})
+				return nil, nil
 			}
 		}
 
@@ -111,10 +130,17 @@ func ResolverMiddleware(
 
 		// POST-FUNCTION CHECK: If this is a root level mutation, run the core 'allow' check:
 		if rctx.Object == "Query" {
-			err = runAllowCheck(ctx, requestPayload, rctx, res)
+			reason, err := runAllowCheck(ctx, requestPayload, rctx, res)
 			// err = requestPayload(ctx, strings.ToLower(rctx.Object), rctx.Field.Name, res)
 			if err != nil {
-				return nil, err
+				graphql.AddError(ctx, &gqlerror.Error{
+					Message: reason,
+					Extensions: map[string]interface{}{
+						"code":  "ALLOW_CHECK_FAIL",
+						"error": err.Error(),
+					},
+				})
+				return nil, nil
 			}
 		}
 
@@ -148,12 +174,14 @@ func ResolverMiddleware(
 	}
 }
 
+// runAllowCheck Returns reason, if given one, and error.  Error may contain
+// the reason as well.
 func runAllowCheck(
 	ctx context.Context,
 	requestPayload func(context.Context, string, string, map[string]interface{}) error,
 	rctx *graphql.ResolverContext,
 	data interface{},
-) error {
+) (string, error) {
 	input := make(map[string]interface{})
 
 	dataMap, ok := data.(map[string]interface{})
@@ -166,7 +194,7 @@ func runAllowCheck(
 
 	err := requestPayload(ctx, strings.ToLower(rctx.Object), rctx.Field.Name, input)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	return CheckAllowed(ctx, strings.ToLower(rctx.Object), rctx.Field.Name, input)
