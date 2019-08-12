@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/episub/spawn/store"
+	"github.com/episub/spawn/vars"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/sirupsen/logrus"
 	"github.com/vektah/gqlparser/gqlerror"
@@ -262,5 +264,34 @@ func (a Auth) DestroySession(r *http.Request) {
 		if err != nil {
 			log.WithField("error", err).Error("Failed to destroy session")
 		}
+	}
+}
+
+// PolicyMW Runs the 'allow' check for policy
+func PolicyMW(prefix string, objectName string, payload DefaultPayloadFunc) func(http.Handler) http.Handler {
+	p := prefix
+	o := objectName
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := context.WithValue(r.Context(), vars.SharedData, store.NewDataStore())
+
+			// Grab payload for request
+			input := map[string]interface{}{}
+			err := payload(r.Context(), p, o, input)
+			if err != nil {
+				w.WriteHeader(http.StatusUnauthorized)
+				w.Write([]byte(err.Error()))
+				return
+			}
+
+			// Check allow policy:
+			err = CheckAllowed(ctx, p, o, input)
+			if err != nil {
+				w.WriteHeader(http.StatusUnauthorized)
+				w.Write([]byte(err.Error()))
+				return
+			}
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
 	}
 }

@@ -19,19 +19,24 @@ import (
 	"github.com/vektah/gqlparser/gqlerror"
 )
 
+// DefaultPayloadFunc Called to fetch default payload
+type DefaultPayloadFunc func(context.Context, string, string, map[string]interface{}) error
+
+// RequestPayloadFunc Returns data specific to particular payloads
+type RequestPayloadFunc func(context.Context, string, string, map[string]interface{}) error
+
 // CheckAccess Used to determine a first-pass access to a query.  Can check basic things like, is this user logged in?
 func CheckAccess(ctx context.Context, prefix string, object string, input map[string]interface{}) (bool, error) {
-
 	user := ctx.Value("user")
 	if user != nil {
 		input["user"] = user
 	}
-	return opa.Authorised(ctx, getAuthString(prefix, object, "access"), input)
+	return opa.Allow(ctx, getAuthString(prefix, object, "access"), input)
 }
 
 // CheckAllowed Checks whether user is allowed to perform the requested mutation
 func CheckAllowed(ctx context.Context, prefix string, objectName string, input map[string]interface{}) error {
-	allowed, err := opa.Authorised(ctx, getAuthString(prefix, objectName, "allow"), input)
+	allowed, err := opa.Allow(ctx, getAuthString(prefix, objectName, "allow"), input)
 
 	if err != nil {
 		return err
@@ -58,8 +63,8 @@ func permissionDeniedError(objectName string) error {
 // ResolverMiddleware Customise resolver middleware and include opentracing
 // Performs multiple authorisation checks
 func ResolverMiddleware(
-	defaultPayloadFunc func(context.Context, string, string, map[string]interface{}) error,
-	requestPayloadFunc func(context.Context, string, string, map[string]interface{}) error,
+	defaultPayloadFunc DefaultPayloadFunc,
+	requestPayloadFunc RequestPayloadFunc,
 ) graphql.FieldMiddleware {
 	opentracingMiddleware := OpentracingResolverMiddleware()
 	defaultPayload := defaultPayloadFunc
@@ -80,6 +85,9 @@ func ResolverMiddleware(
 		}
 
 		// Mutations are checked before completing action, while queries are checked after
+		// This is because mutations can change state, and we only want to do that
+		// if permitted.  Queries wait until after so that we're not fetching
+		// objects from database multiple times.
 		// PRE-FUNCTION CHECK: If this is a root level mutation, run the core 'allow' check:
 		var err error
 		if rctx.Object == "Mutation" {
@@ -87,16 +95,6 @@ func ResolverMiddleware(
 			if err != nil {
 				return nil, err
 			}
-			//	input, err := requestPayload(ctx, strings.ToLower(rctx.Object), rctx.Field.Name, rctx.Args)
-			//	if err != nil {
-			//		return nil, err
-			//	}
-
-			//	mergeMap(input, rctx.Args)
-			//	err = CheckAllowed(ctx, strings.ToLower(rctx.Object), rctx.Field.Name, input)
-			//	if err != nil {
-			//		return nil, err
-			//	}
 		}
 
 		// Run the resolvers
@@ -252,7 +250,7 @@ func hasFieldAccess(ctx context.Context, object interface{}, defaultPayload func
 			log.Printf("WARNING: Could not add default payload: %s", err)
 		}
 
-		allowed, err = opa.Authorised(ctx, policy, input)
+		allowed, err = opa.Allow(ctx, policy, input)
 
 		// Caching is disabled for now: Implementing caching is tricky, because a cached answer for one record (e.g., a client viewing their own client field) might be used for another (e.g., a client viewing another client's field).
 

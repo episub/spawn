@@ -64,7 +64,7 @@ func AuthorisedPermissions(ctx context.Context, permissions []string, rootPolicy
 	// Iterate over each specified permission, checking if the user has it or not
 	for _, p := range permissions {
 		policy := fmt.Sprintf("%s.%s.allow", rootPolicy, p)
-		allowed, err := Authorised(ctx, policy, data)
+		allowed, err := Allow(ctx, policy, data)
 
 		if err != nil {
 			graphql.AddErrorf(ctx, fmt.Sprintf("Error verifying permission to %s for %s: %s", p, rootPolicy, err))
@@ -77,8 +77,9 @@ func AuthorisedPermissions(ctx context.Context, permissions []string, rootPolicy
 	return parsedPermissions, nil
 }
 
-// Authorised Returns a simple true/false answer to the question of whether or not the item is authorised.  If policy does not exist, it returns false and no error, but logs it
-func Authorised(ctx context.Context, policy string, data map[string]interface{}) (bool, error) {
+// Allow Returns a simple true/false answer for a true/false policy.  If policy
+// does not exist, it returns false and no error, but logs it
+func Allow(ctx context.Context, policy string, data map[string]interface{}) (bool, error) {
 	span, ctx := opentracing.StartSpanFromContext(ctx, "Authorised")
 	defer span.Finish()
 
@@ -107,6 +108,8 @@ func Authorised(ctx context.Context, policy string, data map[string]interface{})
 
 	return allowed, nil
 }
+
+//
 
 // GetInt Returns an integer given by the named policy
 func GetInt(ctx context.Context, policy string, data map[string]interface{}) (int64, error) {

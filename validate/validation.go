@@ -11,7 +11,7 @@ import (
 	"cloud.google.com/go/civil"
 )
 
-var numberRx = regexp.MustCompile(`^[0-9]+$`)
+var numberRx = regexp.MustCompile(`^-?\d*$`)
 var emailRx = regexp.MustCompile(`^\S+@\S+$`)
 var lettersWithSpacesRx = regexp.MustCompile(`^[- 'a-zA-ZÀ-ÖØ-öø-ÿ]+$`)
 var lettersWithNumbersRx = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
