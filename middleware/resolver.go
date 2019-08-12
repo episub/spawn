@@ -111,8 +111,14 @@ func ResolverMiddleware(
 		if rctx.Object == "Mutation" {
 			reason, data, err := runAllowCheck(ctx, requestPayload, rctx, rctx.Args)
 			if err != nil {
+				var msg string
+				if len(reason) > 0 {
+					msg = reason
+				} else {
+					msg = err.Error()
+				}
 				graphql.AddError(ctx, &gqlerror.Error{
-					Message: reason,
+					Message: msg,
 					Extensions: map[string]interface{}{
 						"code":  "ALLOW_CHECK_FAIL",
 						"error": err.Error(),
@@ -140,8 +146,14 @@ func ResolverMiddleware(
 			reason, data, err := runAllowCheck(ctx, requestPayload, rctx, res)
 			// err = requestPayload(ctx, strings.ToLower(rctx.Object), rctx.Field.Name, res)
 			if err != nil {
+				var msg string
+				if len(reason) > 0 {
+					msg = reason
+				} else {
+					msg = err.Error()
+				}
 				graphql.AddError(ctx, &gqlerror.Error{
-					Message: reason,
+					Message: msg,
 					Extensions: map[string]interface{}{
 						"code":  "ALLOW_CHECK_FAIL",
 						"error": err.Error(),
