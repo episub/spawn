@@ -119,18 +119,19 @@ func Authorised(
 	ctx context.Context,
 	policy string,
 	data map[string]interface{},
-) (bool, string, error) {
+) (bool, string, interface{}, error) {
 	span, ctx := opentracing.StartSpanFromContext(ctx, "Authorised")
 	defer span.Finish()
 
 	var allowed bool
 	var reason string
+	var replyData interface{}
 
 	// Call the policy, and get our response
 	rs, err := runRego(ctx, policy, data)
 
 	if err != nil {
-		return allowed, reason, err
+		return allowed, reason, replyData, err
 	}
 
 	// Explicitly convert to array of interfaces, and all of those interfaces should be strings though we cannot cast directly to []string
@@ -138,23 +139,25 @@ func Authorised(
 
 	// No such policy, but we just count that as false?
 	if (len(rs) < 1) || (len(rs[0].Expressions) < 1) {
-		return false, reason, ErrNoPolicy
+		return false, reason, replyData, ErrNoPolicy
 	}
 	reply, ok := rs[0].Expressions[0].Value.(map[string]interface{})
 
 	if !ok {
-		return false, reason, fmt.Errorf("Could not authorise action.  Return type: %s", reflect.TypeOf(rs[0].Expressions[0].Value))
+		return false, reason, replyData, fmt.Errorf("Could not authorise action.  Return type: %s", reflect.TypeOf(rs[0].Expressions[0].Value))
 	}
 
 	allowed, ok = reply["value"].(bool)
 	if !ok {
-		return false, reason, fmt.Errorf("Expected value to be boolean, but was not")
+		return false, reason, replyData, fmt.Errorf("Expected value to be boolean, but was not")
 	}
 
 	// Don't care if this is missing, since reason should be optional
 	reason, _ = reply["reason"].(string)
+	// Don't care what this is:
+	replyData = reply["data"]
 
-	return allowed, reason, nil
+	return allowed, reason, replyData, nil
 }
 
 // GetInt Returns an integer given by the named policy
