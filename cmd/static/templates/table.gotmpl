@@ -410,18 +410,27 @@ func Upsert(ctx context.Context, db gnorm.DB, o Row) (Row, error) {
 	span, _ := opentracing.StartSpanFromContext(ctx, "Upsert_{{.Table.Name}}")
 	defer span.Finish()
 
+	return UpsertOnConflict(ctx, "{{ join .Table.PrimaryKeys.DBNames.Sorted ", " }}", db, o)
+}
+
+// UpsertOnConflict Creates or updates record based on input, allowing user
+// to provide a custom on conflict
+func UpsertOnConflict(ctx context.Context, onConflict string, db gnorm.DB, o Row) (Row, error) {
+	span, _ := opentracing.StartSpanFromContext(ctx, "UpsertOnConflict_{{.Table.Name}}")
+	defer span.Finish()
+
 	var err error
 	if err = prepareCreate(ctx, &o); err != nil {
 		return o, err
 	}
 
 	// sql query
-	const sqlstr = `INSERT INTO {{$schema}}.{{$table}} (` +
+	var sqlstr = `INSERT INTO {{$schema}}.{{$table}} (` +
 		`{{ join .Table.Columns.DBNames.Sorted ", " }}` +
 		`) VALUES (` +
 		{{- $vals := numbers 1 (len .Table.Columns) }}
 		`${{ join $vals ", $" }}` +
-		`) ON CONFLICT ({{ join .Table.PrimaryKeys.DBNames.Sorted ", " }}) DO UPDATE SET (` +
+		`) ON CONFLICT (` + onConflict + `) DO UPDATE SET (` +
 		`{{ join .Table.Columns.DBNames.Sorted ", " }}` +
 		`) = (` +
 		`EXCLUDED.{{ join .Table.Columns.DBNames.Sorted ", EXCLUDED." }}` +
