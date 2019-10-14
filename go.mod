@@ -13,7 +13,6 @@ require (
 	github.com/episub/pqt v0.0.0-20181112131323-01e28ce941a0
 	github.com/fatih/color v1.7.0 // indirect
 	github.com/getsentry/sentry-go v0.2.1
-	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-chi/chi v4.0.2+incompatible
 	github.com/go-sql-driver/mysql v1.4.1
 	github.com/gobwas/glob v0.2.3 // indirect
