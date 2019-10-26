@@ -17,6 +17,7 @@ const (
 type File interface {
 	Bytes() ([]byte, error)
 	Name() (string, error)
+	RealPath() string
 }
 
 // LocalFile Reference to a file on the local filesystem
@@ -61,6 +62,11 @@ func (f *LocalFile) Bytes() ([]byte, error) {
 	}
 
 	return *f.bytes, nil
+}
+
+// RealPath Returns the path to this file
+func (f *LocalFile) RealPath() string {
+	return CanonicalPath(f.Path)
 }
 
 // CanonicalPath Returns the path for a file.  It checks if the path is an
