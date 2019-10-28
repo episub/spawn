@@ -161,64 +161,80 @@ func (a Auth) SetUnauthorised(w http.ResponseWriter, r *http.Request) {
 	w.Write(b)
 }
 
+// CustomAuthenticationHandler Returns a function for authenticating user,
+// using a custom function provided for checking the authentication details.
+// Handles all the session destruction and creation and so forth
+func (a Auth) CustomAuthenticationHandler(
+	authenticator func(r *http.Request) (User, error),
+) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		span, ctx := opentracing.StartSpanFromContext(r.Context(), "customAuthenticationHandler")
+		defer span.Finish()
+
+		var invalidLoginMsg = "Invalid login credential(s)"
+		// Destroy existing session on this client, if it exists, since sessions shouldn't be shared across machines:
+		a.DestroySession(r)
+
+		user, err := authenticator(r)
+
+		if err != nil {
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprintf(w, invalidLoginMsg)
+			log.WithFields(logrus.Fields{"error": err}).Info("Failed to validate user authentication request")
+			return
+		}
+
+		session, expiry, err := a.CreateSession(ctx, user)
+
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, invalidLoginMsg)
+			log.WithField("error", err).Error("Failed to create session")
+			return
+		}
+
+		var c http.Cookie
+		c.Name = a.CookieName
+		c.Value = session
+		c.Expires = expiry
+		c.HttpOnly = true
+		if !a.Debug {
+			c.Secure = true
+		}
+		http.SetCookie(w, &c)
+
+		w.WriteHeader(http.StatusOK)
+	}
+}
+
 // AuthenticationHandler Authenticates user and returns jwt if valid
 func (a Auth) AuthenticationHandler(w http.ResponseWriter, r *http.Request) {
 	span, ctx := opentracing.StartSpanFromContext(r.Context(), "authenticationHandler")
 	defer span.Finish()
 
-	// Destroy existing session on this client, if it exists, since sessions shouldn't be shared across machines:
-	a.DestroySession(r)
+	// We define the function used for verifying user, and call standard function
+	// above for handling actual  session creation/deletion
+	f := func(r *http.Request) (User, error) {
+		var username, password string
 
-	var err error
-	var username, password string
-	var invalidLoginMsg = "Invalid username or password"
+		// Grab username and password
+		if len(r.URL.Query()["username"]) > 0 {
+			username = r.URL.Query()["username"][0]
+		}
 
-	// Grab username and password
-	if len(r.URL.Query()["username"]) > 0 {
-		username = r.URL.Query()["username"][0]
+		if len(r.URL.Query()["password"]) > 0 {
+			password = r.URL.Query()["password"][0]
+		}
+
+		// If no username or password provided, request is bad
+		if len(username) == 0 || len(password) == 0 {
+			return nil, fmt.Errorf("Attempt to authenticate with empty username or password")
+		}
+
+		return a.AuthenticateUser(ctx, username, password)
 	}
 
-	if len(r.URL.Query()["password"]) > 0 {
-		password = r.URL.Query()["password"][0]
-	}
-
-	// If no username or password provided, request is bad
-	if len(username) == 0 || len(password) == 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, invalidLoginMsg)
-		log.Info("Attempt to authenticate with empty username or password")
-		return
-	}
-
-	user, err := a.AuthenticateUser(ctx, username, password)
-
-	if err != nil {
-		w.WriteHeader(http.StatusForbidden)
-		fmt.Fprintf(w, invalidLoginMsg)
-		log.WithFields(logrus.Fields{"error": err, "username": username}).Info("Failed to validate user password")
-		return
-	}
-
-	session, expiry, err := a.CreateSession(ctx, user)
-
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, invalidLoginMsg)
-		log.WithField("error", err).Error("Failed to create session")
-		return
-	}
-
-	var c http.Cookie
-	c.Name = a.CookieName
-	c.Value = session
-	c.Expires = expiry
-	c.HttpOnly = true
-	if !a.Debug {
-		c.Secure = true
-	}
-	http.SetCookie(w, &c)
-
-	w.WriteHeader(http.StatusOK)
+	a.CustomAuthenticationHandler(f)(w, r)
 }
 
 // LogoutHandler Authenticates user and returns jwt if valid

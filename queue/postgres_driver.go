@@ -54,7 +54,11 @@ func NewPostgresDriver(dbUser string, dbPass string, dbHost string, dbName strin
 }
 
 func (d *PostgresDriver) taskQueryColumns() string {
-	return "a." + d.tableName + "_id, a.task_key, a.task_name, a.created_at, a.data, a.state"
+	return "a." + d.primaryKey() + ", a.task_key, a.task_name, a.created_at, a.data, a.state"
+}
+
+func (d *PostgresDriver) primaryKey() string {
+	return d.tableName + "_id"
 }
 
 // clear Removes all entries from the queue.  Be careful.  Generally you should cancel entries rather than delete.
@@ -77,7 +81,7 @@ func (d *PostgresDriver) addTask(taskName string, taskKey string, data map[strin
 	// Convert
 	_, err = d.pool.Exec(`
 INSERT INTO `+d.schemaTable()+`
-	(`+d.tableName+`_id, data, state, task_key, task_name, created_at, last_attempted, last_attempt_message)
+	(`+d.primaryKey()+`, data, state, task_key, task_name, created_at, last_attempted, last_attempt_message)
 VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'Created')`,
 		dataString,
 		"READY",
@@ -106,9 +110,8 @@ func (d *PostgresDriver) pop() (Task, error) {
 	var data string
 
 	query := `
-UPDATE ` + d.schemaTable() + ` a SET last_attempted=Now(), last_attempt_message='Attempting', state='` + string(TaskInProgress) + `'
-WHERE ` + d.tableName + `_id IN (
-	SELECT ` + d.tableName + `_id
+WITH u AS (
+	SELECT ` + d.primaryKey() + `
 	FROM ` + d.schemaTable() + `
 	WHERE state IN ('` + string(TaskReady) + `')
 	OR (
@@ -116,7 +119,11 @@ WHERE ` + d.tableName + `_id IN (
 		AND state IN ('` + string(TaskInProgress) + `', '` + string(TaskRetry) + `')
 	)
 	ORDER BY last_attempted ASC
+	LIMIT 1
 )
+UPDATE ` + d.schemaTable() + ` a SET last_attempted=Now(), last_attempt_message='Attempting', state='` + string(TaskInProgress) + `'
+FROM u
+WHERE a.` + d.primaryKey() + ` = u.` + d.primaryKey() + `
 RETURNING ` + d.taskQueryColumns()
 
 	err := d.pool.QueryRow(query).Scan(&task.id, &task.Key, &task.Name, &task.Created, &data, &task.State)
@@ -166,7 +173,7 @@ func (d *PostgresDriver) retry(id string, message string) error {
 }
 
 func (d *PostgresDriver) setTaskState(id string, state TaskState, message string) error {
-	_, err := d.pool.Exec("UPDATE "+d.schemaTable()+" SET state=$1, last_attempted=$2, last_attempt_message=$3 WHERE "+d.tableName+"_id = $4", string(state), time.Now(), message, id)
+	_, err := d.pool.Exec("UPDATE "+d.schemaTable()+" SET state=$1, last_attempted=$2, last_attempt_message=$3 WHERE "+d.primaryKey()+" = $4", string(state), time.Now(), message, id)
 
 	return err
 }

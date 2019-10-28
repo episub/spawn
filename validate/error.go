@@ -56,7 +56,7 @@ func SetContext(ctx context.Context) context.Context {
 func GetErrorsFromContext(ctx context.Context) *[]Error {
 	ve, ok := ctx.Value(validationValue).(*[]Error)
 	if !ok {
-		panic("No validation errors found in context.  Use SetValidationContext function first to create value in context")
+		panic("No validation errors found in context.  Use SetContext function first to create value in context")
 	}
 	return ve
 }
