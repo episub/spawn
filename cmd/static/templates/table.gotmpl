@@ -12,6 +12,7 @@
 {{$parentKey := false}} {{/* When there's a child table like _version, this is the parent table primary key */}}
 {{$dot := .}}
 {{$tables := makeSlice ""}}
+{{$isView := hasPrefix .Table.DBName "view_"}}
 
 {{- $nonPKDBNames := .Table.Columns.DBNames.Sorted.Except .Table.PrimaryKeys.DBNames}}
 
@@ -405,6 +406,8 @@ func One{{$element}}(ctx context.Context, db {{$rootPkg}}.DB, where []sq.Sqlizer
 {{end}}
 {{end}}
 
+{{if $isView}}
+{{else}}
 // Upsert Creates or updates record based on input
 func Upsert(ctx context.Context, db gnorm.DB, o Row) (Row, error) {
 	span, _ := opentracing.StartSpanFromContext(ctx, "Upsert_{{.Table.Name}}")
@@ -678,3 +681,4 @@ func prepareCreate(ctx context.Context, o *Row) error {
 
 	return nil
 }
+{{end}}
