@@ -47,14 +47,21 @@ func InUUIDUUID(field string, values []uuid.UUID) In {
 }
 
 // ToSql Returns the sql related objects expected by squirrel
-func (i In) ToSql() (sql string, args []interface{}, err error) {
-	questions := make([]string, len(i.Values))
+func (in In) ToSql() (sql string, args []interface{}, err error) {
+	questions := make([]string, len(in.Values))
 
-	for i := range i.Values {
+	for i := range in.Values {
 		questions[i] = "?"
 	}
 
-	sql = fmt.Sprintf("%s in (%s)", i.Field, strings.Join(questions, ", "))
+	// No entries:
+	if len(in.Values) == 0 {
+		sql = fmt.Sprintf("false")
+		return
+	}
 
-	return sql, i.Values, nil
+	// Some values, so build it out:
+	sql = fmt.Sprintf("%s in (%s)", in.Field, strings.Join(questions, ", "))
+
+	return sql, in.Values, nil
 }

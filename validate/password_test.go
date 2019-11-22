@@ -29,6 +29,10 @@ var PasswordUpperLowerNumberTests = []passwordTest{
 		Accept:   true,
 	},
 	{
+		Password: "2i Jo",
+		Accept:   true,
+	},
+	{
 		Password: "2iJo$",
 		Accept:   true,
 	},

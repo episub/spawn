@@ -450,6 +450,11 @@ func BatchInsert(ctx context.Context, db gnorm.DB, rows []Row) error {
 	span, _ := opentracing.StartSpanFromContext(ctx, "BatchInsert_{{.Table.Name}}")
 	defer span.Finish()
 
+	// No rows, so do nothing
+	if len(rows) == 0 {
+		return nil
+	}
+
 	args := make([]interface{}, {{len .Table.Columns}} * len(rows))
 	inserts := make([]string, len(rows))
 
