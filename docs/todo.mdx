@@ -19,3 +19,4 @@ name: TODO
 * Consider a migration tool like goose, sql-migrate, mattes/migrate
 * Automatic generate docs for auto gen code
 * Provide hydrate function with db connection and have it return error
+* Allow pagination for differing sort orders.  E.g., you may sort by boolField DESC, name ASC.  Pagination won't work with this.  Solution is to not use row value constructor and compare, but instead do something like "WHERE boolField < true OR (boolField = true AND name > 'myname').  Maybe use row value constructor when sort orders are all the same, and this alternative when not?  Not sure of performance impact.
