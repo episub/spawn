@@ -1,8 +1,11 @@
 package static
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
+	"path"
+	"path/filepath"
 )
 
 const (
@@ -20,20 +23,25 @@ type File interface {
 	RealPath() string
 }
 
-// LocalFile Reference to a file on the local filesystem
-type LocalFile struct {
+// UnionFile Reference to a file on the local filesystem
+type UnionFile struct {
 	Path     string
 	fileInfo os.FileInfo
 	bytes    *[]byte
 }
 
-// NewLocalFile Returns a new LocalFile struct
-func NewLocalFile(path string) LocalFile {
-	return LocalFile{Path: path}
+// NewUnionFile Returns a new UnionFile struct
+func NewUnionFile(path string) (UnionFile, error) {
+	defaultPath := os.Getenv(EnvStaticDefaultFolder)
+	if len(defaultPath) == 0 {
+		return UnionFile{}, fmt.Errorf(EnvStaticDefaultFolder + " environment variable cannot be null")
+	}
+
+	return UnionFile{Path: path}, nil
 }
 
 // Name Returns the file name
-func (f *LocalFile) Name() (string, error) {
+func (f *UnionFile) Name() (string, error) {
 	path := CanonicalPath(f.Path)
 
 	if f.fileInfo == nil {
@@ -48,7 +56,7 @@ func (f *LocalFile) Name() (string, error) {
 }
 
 // Bytes Returns the bytes for this file if it exists on local system
-func (f *LocalFile) Bytes() ([]byte, error) {
+func (f *UnionFile) Bytes() ([]byte, error) {
 	// We cache the value of the bytes so we don't re-read
 	if f.bytes == nil {
 		path := CanonicalPath(f.Path)
@@ -65,40 +73,32 @@ func (f *LocalFile) Bytes() ([]byte, error) {
 }
 
 // RealPath Returns the path to this file
-func (f *LocalFile) RealPath() string {
+func (f *UnionFile) RealPath() string {
 	return CanonicalPath(f.Path)
 }
 
-// CanonicalPath Returns the path for a file.  It checks if the path is an
-// absolute one, and then returns that path if file exists, otherwise an
-// error.  If path is relative, then checks if file exists in variant folder
-// first, and if not, in default folder.  If file doesn't exist in either,
-// returns error, otherwise returns the path
+// CanonicalPath Returns the path for a file.  It checks first within the
+// variant folder, and then within the default.  It does some cleaning of
+// the url and checking to ensure we haven't escaped the sandbox of our static
+// or default folders
 func CanonicalPath(file string) string {
+	var dir string
 	defaultPath := os.Getenv(EnvStaticDefaultFolder)
 	variantPath := os.Getenv(EnvStaticVariantFolder)
 
-	// Check if path is absolute, returning root file if so
-	if []byte(file)[0] == []byte("/")[0] {
-		return file
-	}
-
-	// Variant folder specified, so check there:
+	// Variant folder specified, so check there and return if exists
 	if len(variantPath) > 0 {
-		path := variantPath + "/" + file
-		if _, err := os.Stat(path); err == nil {
-			return path
+		dir = sandboxedFile(variantPath, file)
+		if _, err := os.Stat(dir); err == nil {
+			return dir
 		}
 	}
 
-	// Default folder, if specified
-	if len(defaultPath) > 0 {
-		path := defaultPath + "/" + file
-		if _, err := os.Stat(path); err == nil {
-			return path
-		}
-	}
+	return sandboxedFile(defaultPath, file)
+}
 
-	// Nothing found, so just return the provided file
-	return file
+// sandboxedFile Returns the folder in question, ensuring that someone can't
+// escape our sandboxed folder and access files outside
+func sandboxedFile(dir string, file string) string {
+	return filepath.Join(dir, filepath.FromSlash(path.Clean("/"+file)))
 }

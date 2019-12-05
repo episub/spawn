@@ -32,9 +32,21 @@ var localFileTestCases = []struct {
 		ExpectedContent: []byte("variant"),
 	},
 	{
+		Path:            "../../../../../../../../../../../../etc/passwd",
+		ExpectedName:    "",
+		ExpectedPath:    "default_test/etc/passwd",
+		ExpectedContent: []byte{},
+	},
+	{
 		Path:            "/absolute/folder",
 		ExpectedName:    "",
-		ExpectedPath:    "/absolute/folder",
+		ExpectedPath:    "default_test/absolute/folder",
+		ExpectedContent: []byte{},
+	},
+	{
+		Path:            "/etc/passwd",
+		ExpectedName:    "",
+		ExpectedPath:    "default_test/etc/passwd",
 		ExpectedContent: []byte{},
 	},
 }
@@ -82,7 +94,10 @@ func TestLocalFile(t *testing.T) {
 				return
 			}
 
-			file := NewLocalFile(tc.Path)
+			file, err := NewUnionFile(tc.Path)
+			if err != nil {
+				t.Error(err)
+			}
 			b, err := file.Bytes()
 
 			if err != nil {
