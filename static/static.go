@@ -1,8 +1,10 @@
 package static
 
 import (
+	"crypto/md5"
+	"encoding/base64"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -18,19 +20,96 @@ const (
 // File A generic interface for a file, which could be pulled from local
 // filesystem, or a remote URL
 type File interface {
-	Bytes() ([]byte, error)
 	Name() (string, error)
-	RealPath() string
+	ETag() (string, error)
+	io.ReadSeeker
+}
+
+// LocalFile References a file on the local filesystem
+type LocalFile struct {
+	Path     string
+	osFile   *os.File
+	fileInfo os.FileInfo
 }
 
 // UnionFile Reference to a file on the local filesystem
 type UnionFile struct {
+	osFile   *os.File
 	Path     string
 	fileInfo os.FileInfo
 	bytes    *[]byte
 }
 
-// NewUnionFile Returns a new UnionFile struct
+// NewLocalFile Returns a new LocalFile struct.  Does not check if the file
+// exists unless the file is called -- e.g., through read or seek
+func NewLocalFile(path string) (LocalFile, error) {
+	return LocalFile{Path: path}, nil
+}
+
+// Name Returns the file name
+func (f *LocalFile) Name() (string, error) {
+	if f.fileInfo == nil {
+		info, err := os.Stat(f.Path)
+		if err != nil {
+			return "", err
+		}
+		f.fileInfo = info
+	}
+
+	return f.fileInfo.Name(), nil
+}
+
+// Read Reader
+func (f *LocalFile) Read(b []byte) (n int, err error) {
+	if f.osFile == nil {
+		// Not yet open, so try opening:
+		file, err := os.Open(f.Path)
+		if err != nil {
+			return 0, err
+		}
+		f.osFile = file
+	}
+
+	return f.osFile.Read(b)
+}
+
+// Seek Seeker
+func (f *LocalFile) Seek(offset int64, whence int) (ret int64, err error) {
+	if f.osFile == nil {
+		// Not yet open, so try opening:
+		file, err := os.Open(f.Path)
+		if err != nil {
+			return 0, err
+		}
+		f.osFile = file
+	}
+
+	return f.osFile.Seek(offset, whence)
+}
+
+// ETag Returns an etag for the file
+func (f *LocalFile) ETag() (string, error) {
+	return modifiedEtag(f.Path)
+}
+
+// modifiedEtag returns an etag based on the file full location and last
+// modified value
+func modifiedEtag(filePath string) (string, error) {
+	file, err := os.Stat(filePath)
+
+	if err != nil {
+		return "", err
+	}
+
+	modifiedTime := file.ModTime()
+
+	etagRaw := md5.Sum([]byte(fmt.Sprintf("%s:%s", filePath, modifiedTime)))
+	etag := base64.StdEncoding.EncodeToString(etagRaw[:])
+	return etag, nil
+}
+
+// NewUnionFile Returns a new UnionFile struct.  Does not check if the file
+// exists unless the file is called -- e.g., through read or seek
 func NewUnionFile(path string) (UnionFile, error) {
 	defaultPath := os.Getenv(EnvStaticDefaultFolder)
 	if len(defaultPath) == 0 {
@@ -55,21 +134,37 @@ func (f *UnionFile) Name() (string, error) {
 	return f.fileInfo.Name(), nil
 }
 
-// Bytes Returns the bytes for this file if it exists on local system
-func (f *UnionFile) Bytes() ([]byte, error) {
-	// We cache the value of the bytes so we don't re-read
-	if f.bytes == nil {
-		path := CanonicalPath(f.Path)
-
-		b, err := ioutil.ReadFile(path)
+// Read Reader
+func (f *UnionFile) Read(b []byte) (n int, err error) {
+	if f.osFile == nil {
+		// Not yet open, so try opening:
+		file, err := os.Open(f.RealPath())
 		if err != nil {
-			return b, err
+			return 0, err
 		}
-
-		f.bytes = &b
+		f.osFile = file
 	}
 
-	return *f.bytes, nil
+	return f.osFile.Read(b)
+}
+
+// Seek Seeker
+func (f *UnionFile) Seek(offset int64, whence int) (ret int64, err error) {
+	if f.osFile == nil {
+		// Not yet open, so try opening:
+		file, err := os.Open(f.RealPath())
+		if err != nil {
+			return 0, err
+		}
+		f.osFile = file
+	}
+
+	return f.osFile.Seek(offset, whence)
+}
+
+// ETag Returns an etag for the file
+func (f *UnionFile) ETag() (string, error) {
+	return modifiedEtag(f.RealPath())
 }
 
 // RealPath Returns the path to this file

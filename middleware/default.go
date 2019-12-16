@@ -2,14 +2,13 @@ package middleware
 
 import (
 	"context"
-	"crypto/md5"
-	"encoding/base64"
 	"net/http"
+	"time"
 
+	"github.com/episub/spawn/static"
 	"github.com/episub/spawn/store"
 	"github.com/episub/spawn/validate"
 	"github.com/episub/spawn/vars"
-	"github.com/h2non/filetype"
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -39,32 +38,33 @@ func BodyLimitMW(size int64) func(http.Handler) http.Handler {
 // and an etag based on a hash of the bytes
 func DeliverFile(
 	ctx context.Context,
-	bytes []byte,
+	file static.File,
 	w http.ResponseWriter,
 	r *http.Request,
-) {
+) error {
 	span, ctx := opentracing.StartSpanFromContext(ctx, "deliverFile")
 	defer span.Finish()
 
-	kind, err := filetype.Match(bytes)
-
+	etag, err := file.ETag()
 	if err != nil {
-		log.WithField("error", err).Error("Could not determine file type")
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		w.WriteHeader(http.StatusBadRequest)
+		return err
 	}
-
-	if len(kind.Extension) > 0 {
-		w.Header().Add("Content-Type", kind.Extension)
-	}
-	etagRaw := md5.Sum(bytes)
-	etag := base64.StdEncoding.EncodeToString(etagRaw[:])
 
 	if r.Header.Get("If-None-Match") == etag {
 		w.WriteHeader(http.StatusNotModified)
-		return
+		return nil
 	}
 
-	w.Header().Set("ETag", etag)
-	w.Write(bytes)
+	w.Header().Add("ETag", "\""+etag+"\"")
+
+	name, err := file.Name()
+
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return err
+	}
+	http.ServeContent(w, r, name, time.Time{}, file)
+
+	return nil
 }
