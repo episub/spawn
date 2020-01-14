@@ -204,24 +204,50 @@ func runRego(ctx context.Context, query string, input map[string]interface{}) (r
 		fmt.Println(string(jsonString))
 	}
 
-	compiler := GetCompiler(ctx)
-	store := GetStore(ctx)
-
-	compiled := getCompiledQuery(query)
-
 	m := metrics.New()
 
-	rego := rego.New(
-		rego.ParsedQuery(compiled),
-		rego.Compiler(compiler),
-		rego.Input(input),
-		rego.Store(store),
-		rego.Metrics(m),
-	)
+	prepared, err := getPreparedRego(ctx, query)
+	if err != nil {
+		return rego.ResultSet{}, err
+	}
 
-	rs, err := rego.Eval(ctx)
+	rs, err := prepared.Eval(ctx, rego.EvalInput(input))
 	if debug {
 		fmt.Println("Dumping rego.Eval metrics:", m.All())
 	}
 	return rs, err
+}
+
+var unsafePrepared map[string]rego.PreparedEvalQuery
+
+func getPreparedRego(ctx context.Context, query string) (rego.PreparedEvalQuery, error) {
+	// Check if already compiled:
+	preparedMutex.RLock()
+	if pq, ok := unsafePrepared[query]; ok {
+		pq = unsafePrepared[query]
+		preparedMutex.RUnlock()
+		return pq, nil
+	}
+	preparedMutex.RUnlock()
+
+	// We must prepare ourselves:
+	preparedMutex.Lock()
+	defer preparedMutex.Unlock()
+	compiler := GetCompiler(ctx)
+	compiled := getCompiledQuery(query)
+	store := GetStore(ctx)
+	r := rego.New(
+		rego.ParsedQuery(compiled),
+		rego.Compiler(compiler),
+		rego.Store(store),
+	)
+
+	pq, err := r.PrepareForEval(ctx)
+
+	if err != nil {
+		return rego.PreparedEvalQuery{}, err
+	}
+	unsafePrepared[query] = pq
+
+	return pq, nil
 }

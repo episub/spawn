@@ -10,6 +10,7 @@ import (
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/loader"
+	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -25,6 +26,7 @@ var loaded bool
 var mutex = &sync.RWMutex{}
 var dMutex = &sync.RWMutex{}
 var queryMutex = &sync.RWMutex{}
+var preparedMutex = &sync.RWMutex{}
 
 // GetCompiler Returns compiler object in thread-safe manner since we sometimes update the compiler in a separate thread
 func GetCompiler(ctx context.Context) *ast.Compiler {
@@ -184,5 +186,6 @@ func setCompiler(compiler *ast.Compiler, documents map[string]interface{}) {
 	dMutex.Unlock()
 	queryMutex.Lock()
 	unsafeQueries = make(map[string]ast.Body)
+	unsafePrepared = make(map[string]rego.PreparedEvalQuery)
 	queryMutex.Unlock()
 }
