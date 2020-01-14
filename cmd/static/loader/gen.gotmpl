@@ -267,8 +267,9 @@ func (l *PostgresLoader) update{{.ModelName}}(ctx context.Context, db gnorm.DB, 
 
 	{{if .Versioned}}
 	// Nullify the version ID so we ensure a new version entry is created each
-	// time:
+	// time, and set created_at to empty:
 	o.Version.{{.ModelName}}VersionID = uuid.Nil
+	o.Version.CreatedAt = time.Time{}
 	{{end}}
 
 	// Helps us keep track of which field has any errors
