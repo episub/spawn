@@ -21,3 +21,12 @@ name: TODO
 * Provide hydrate function with db connection and have it return error
 * Allow pagination for differing sort orders.  E.g., you may sort by boolField DESC, name ASC.  Pagination won't work with this.  Solution is to not use row value constructor and compare, but instead do something like "WHERE boolField < true OR (boolField = true AND name > 'myname').  Maybe use row value constructor when sort orders are all the same, and this alternative when not?  Not sure of performance impact.
 * Refactor static to use existing Go interfaces, including io.Reader and so forth, perhaps
+
+# Policy Changes
+
+For field permissions:
+
+* Retire viewField
+* Cache the allowedFields list where ID() method exists on object
+* Cache the allowedFields where there is a policy that permits that field to be
+cached.  E.g., suppliersConnection.edges.node should be fine to cache

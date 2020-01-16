@@ -10,6 +10,7 @@ require (
 	github.com/cockroachdb/apd v1.1.0 // indirect
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
 	github.com/codemodus/kace v0.5.1
+	github.com/davecgh/go-spew v1.1.1
 	github.com/episub/pqt v0.0.0-20181112131323-01e28ce941a0
 	github.com/fatih/color v1.7.0 // indirect
 	github.com/getsentry/sentry-go v0.2.1
@@ -46,5 +47,6 @@ require (
 	gnorm.org/gnorm v1.0.0
 	go.uber.org/atomic v1.4.0 // indirect
 	golang.org/x/crypto v0.0.0-20190325154230-a5d413f7728c
+	gopkg.in/oleiade/reflections.v1 v1.0.0
 	gopkg.in/yaml.v2 v2.2.2
 )

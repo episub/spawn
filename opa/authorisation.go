@@ -42,6 +42,9 @@ func AuthorisedStrings(ctx context.Context, policy string, data map[string]inter
 	}
 
 	// Explicitly convert to array of interfaces, and all of those interfaces should be strings though we cannot cast directly to []string
+	if len(rs) == 0 || len(rs[0].Expressions) == 0 {
+		return []string{}, fmt.Errorf("No results")
+	}
 	allowedInterface, ok := rs[0].Expressions[0].Value.([]interface{})
 
 	if !ok {

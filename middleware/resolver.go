@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/sirupsen/logrus"
 	"github.com/vektah/gqlparser/gqlerror"
+	reflections "gopkg.in/oleiade/reflections.v1"
 )
 
 // DefaultPayloadFunc Called to fetch default payload
@@ -247,6 +249,28 @@ func OpentracingResolverMiddleware() graphql.FieldMiddleware {
 	}
 }
 
+func getField(object interface{}, fieldName string) (field string, err error) {
+	defer func() {
+		if recover() != nil {
+			err = errors.New("Failed to get field on object")
+		}
+	}()
+
+	f, err := reflections.GetField(object, fieldName)
+	field = f.(string)
+	return field, err
+}
+
+func arrayContains(list []string, v string) bool {
+	for _, f := range list {
+		if v == f {
+			return true
+		}
+	}
+
+	return false
+}
+
 // hasFieldAccess Verify access to the requested query field
 func hasFieldAccess(ctx context.Context, object interface{}, defaultPayload func(context.Context, string, string, map[string]interface{}) error) (bool, error) {
 	span, ctx := opentracing.StartSpanFromContext(ctx, "hasFieldAccess")
@@ -260,34 +284,61 @@ func hasFieldAccess(ctx context.Context, object interface{}, defaultPayload func
 	)
 
 	allowed := true
+	// panic("Is it safe to cache these unnamed values like I am?")
 
 	if rctx.Object != "Mutation" && !strings.HasPrefix(rctx.Object, "__") {
+		var parent interface{}
+		if rctx.Parent != nil {
+			parent = rctx.Parent.Result
+		}
+
 		field := rctx.Field.Alias
-		policy := fmt.Sprintf("data.api.entity.%s.viewField", lowerFirst(rctx.Object))
+		policy := fmt.Sprintf("data.api.entity.%s", lowerFirst(rctx.Object))
+		cacheName := policy
+
+		// We want to remember if this policy check was for the same part of the
+		// tree or somewhere very different.  We shorten fl by one so that, e.g.,
+		// suppliersConnection.edges.node.name becomes
+		// suppliersConnection.edges.node.  That way we can cache the field list
+		// for all of the node fields, rather than none being cached
 		fl := fullFieldList(*rctx, false)
-		cacheName := strings.Join(fl, ".") + ":" + policy
-
-		// Check for cached answer:
-		v, err := store.ContextReadValue(ctx, vars.SharedData, cacheName)
-		if err != nil {
-			return false, err
+		if len(fl) > 0 {
+			fl = fl[:len(fl)-1]
 		}
 
-		vb, ok := v.(bool)
+		id, err := getField(parent, "ID")
 
-		if ok {
-			return vb, nil
+		// TODO IMPORTANT: Eliminate the dependency on viewField.  All fields
+		// should be explicitly listed.  This will allow us to eliminate some
+		// extra code here that falls back to viewField policy
+		// For now, only objects with an ID field are being cached
+		if err == nil && len(id) > 0 {
+			cacheName = fmt.Sprintf("%s:%s:%s", strings.Join(fl, "."), id, cacheName)
+			// cacheName = fmt.Sprintf("%s:%s", id, cacheName)
+			// log.Printf("Cache search key: %s", cacheName)
+
+			v, err := store.ContextReadValue(ctx, vars.SharedData, cacheName)
+			if err != nil {
+				return false, err
+			}
+
+			vb, ok := v.([]string)
+
+			// If len == 0, then this might be because the policy allows all fields
+			// and we need to fall bacak on the viewField policy
+			if ok && len(vb) > 0 {
+				// log.Printf("RETURNING CACHED VALUE object: %s, field: %s", rctx.Object, rctx.Field.Alias)
+				return arrayContains(vb, field), nil
+			}
 		}
+		// log.Printf("CAN'T USE CACHED VALUE FOR object: %s, field: %s", rctx.Object, rctx.Field.Alias)
 
+		//log.Printf("Object: %s, field: %s", rctx.Object, rctx.Field.Alias)
 		// Not found in cache, so let's check the policy:
 		allowed = false
 
 		input := make(map[string]interface{})
-		var parent interface{}
 		input["field"] = field
-		if rctx.Parent != nil {
-			parent = rctx.Parent.Result
-		}
 
 		// Add some default data to the check
 		input["fieldValue"] = object
@@ -298,18 +349,22 @@ func hasFieldAccess(ctx context.Context, object interface{}, defaultPayload func
 			log.Printf("WARNING: Could not add default payload: %s", err)
 		}
 
-		allowed, err = opa.Allow(ctx, policy, input)
+		allFields, err := opa.AuthorisedStrings(ctx, fmt.Sprintf("%s.allowedFields", policy), input)
+		if err == nil && len(allFields) > 0 {
+			// Save in cache:
+			if len(cacheName) > 0 {
+				cErr := store.ContextAddValue(ctx, vars.SharedData, cacheName, allFields)
+				if cErr != nil {
+					log.Error(cErr)
+				}
+			}
+			return arrayContains(allFields, field), nil
+		}
 
-		// Caching is disabled for now: Implementing caching is tricky, because a cached answer for one record (e.g., a client viewing their own client field) might be used for another (e.g., a client viewing another client's field).
-
-		//	// Store the result in cache
-		//	if err == nil {
-		//		//log.WithField("cacheName", cacheName).Infof("Adding field resolver value to store")
-		//		cErr := store.ContextAddValue(ctx, sharedData, cacheName, allowed)
-		//		if cErr != nil {
-		//			log.WithField("error", cErr).Errorf("Error storing field value in cache")
-		//		}
-		//	}
+		// Failing finding the specific field, there might be a general policy
+		// that allows any field to be viewed:
+		log.Warningf("viewField will soon be deprecated.  If you are not already, please specify allowedFields permission to explicitly list all fields allowed.  Falling back to viewField for object: %s, field: %s", rctx.Object, field)
+		allowed, err = opa.Allow(ctx, policy+".viewField", input)
 	}
 
 	return allowed, err
