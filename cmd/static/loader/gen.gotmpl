@@ -302,6 +302,29 @@ func (l *PostgresLoader) update{{.ModelName}}(ctx context.Context, db gnorm.DB, 
 	return sanitiseError(err)
 }
 
+
+// Create{{.ModelName}} Creates {{.ModelName}} based on provided changes
+func (l *PostgresLoader) Create{{.ModelName}}(ctx context.Context, u map[string]interface{}) (o {{.ModelStruct}}, err error){
+	tx, err := l.pool.Begin()
+
+	if err != nil {
+		return o, sanitiseError(err)
+	}
+
+	row, err := l.create{{.ModelName}}(ctx, tx, u)
+	if gnorm.RollbackErr(err, tx) != nil {
+		return o, sanitiseError(err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return o, sanitiseError(err)
+	}
+
+	o, err = hydrateModel{{.ModelName}}(ctx, l.pool, row)
+	return o, sanitiseError(err)
+}
+
 // create{{.PmName}} Creates {{.PmName}} from given input
 func (l *PostgresLoader) create{{.PmName}}(ctx context.Context, db gnorm.DB, i map[string]interface{}) (o {{$package}}.{{$fullStr}}Row, err error) {
 	span, ctx := opentracing.StartSpanFromContext(ctx, "create{{.PmName}}")
@@ -333,5 +356,14 @@ func (l *PostgresLoader) create{{.PmName}}(ctx context.Context, db gnorm.DB, i m
 	o, err = {{$package}}.Upsert{{$fullStr}}(ctx, db, o)
 
 	return o, sanitiseError(err)
+}
+
+// Delete{{.PmName}} Deletes {{.PmName}} record with given ID
+func (l *PostgresLoader) Delete{{.PmName}}(ctx context.Context, id uuid.UUID) (bool, error) {
+	span, ctx := opentracing.StartSpanFromContext(ctx, "Delete{{.PmName}}")
+	defer span.Finish()
+
+	count, err := {{$package}}.Delete(ctx, l.pool, id)
+	return (count > 0), sanitiseError(err)
 }
 {{end}}

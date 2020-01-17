@@ -10,11 +10,17 @@
 {{$parent := false}} {{/* When there's a child table like _version, this is the parent */}}
 {{$child := false}} {{/* When there's a child table like _version, this is the child */}}
 {{$parentKey := false}} {{/* When there's a child table like _version, this is the parent table primary key */}}
+{{$primaryKey := false}} {{/* When there's one or more primary keys, this is set to the first */}}
 {{$dot := .}}
 {{$tables := makeSlice ""}}
 {{$isView := hasPrefix .Table.DBName "view_"}}
 
 {{- $nonPKDBNames := .Table.Columns.DBNames.Sorted.Except .Table.PrimaryKeys.DBNames}}
+
+
+{{if .Table.HasPrimaryKey }}
+{{$primaryKey = (index .Table.PrimaryKeys 0)}}
+{{end}}
 
 {{/* We want a "Full" query for each type.  Just the single table if there's no version table, otherwise a combined Table + TableVersion thing for full/*}}
 {{/* If this IS the "_version" table file, we don't generate these fields */}}
@@ -221,7 +227,6 @@ func Query{{$element}}(
 {{end}}
 
 {{if .Table.HasPrimaryKey }}
-{{$primaryKey := (index .Table.PrimaryKeys 0)}}
 // PaginatedQuery Query used to get paginated results.  Can be replaced with
 // a custom query of your own choosing that will allow you to sort or filter
 // based on related fields as well
@@ -412,6 +417,19 @@ func One{{$element}}(ctx context.Context, db {{$rootPkg}}.DB, where []sq.Sqlizer
 func Upsert(ctx context.Context, db gnorm.DB, o Row) (Row, error) {
 	span, _ := opentracing.StartSpanFromContext(ctx, "Upsert_{{.Table.Name}}")
 	defer span.Finish()
+	
+
+	{{if .Table.HasPrimaryKey }}
+	// If UUID is zero, that suggests this is a creation, so let us provide an
+	// explicit new ID:
+	if o.{{$primaryKey.Name}} == uuid.Nil {
+		var err error
+		o.{{$primaryKey.Name}}, err = uuid.NewV4()
+		if err != nil {
+			return Row{}, err
+		}
+	}
+	{{end}}
 
 	return UpsertOnConflict(ctx, "{{ join .Table.PrimaryKeys.DBNames.Sorted ", " }}", db, o)
 }
@@ -513,6 +531,12 @@ func UpsertFull(ctx context.Context, db gnorm.DB, o FullRow) (FullRow, error) {
 	if err != nil {
 		return o, err
 	}
+
+	// If this was a create, the child record won't have the parent field set.
+	// We should set it explicitly to ensure that on creation it is set:
+	{{if .Table.HasPrimaryKey }}
+	o.Version.{{$primaryKey.Name}}{{.Table.Name}} = o.Parent.{{$primaryKey.Name}}
+	{{end}}
 
 	// Upsert the child record:
 	o.Version, err = {{toLower $child.Name}}.Upsert(ctx, db, o.Version)
