@@ -156,6 +156,7 @@ func All{{$element}}(ctx context.Context, db {{$rootPkg}}.DB) ([]{{$element}}Row
 	if err != nil {
 		return nil, errors.Wrap(err, "query {{$dot.Table.Name}}")
 	}
+	defer q.Close()
 	for q.Next() {
 		r, err := {{$element}}Scanner(q)
 		if err != nil {
@@ -215,6 +216,7 @@ func Query{{$element}}(
 	if err != nil {
 		return nil, errors.Wrap(err, "query{{$element}} query {{$dot.Table.Name}}")
 	}
+	defer q.Close()
 	for q.Next() {
 		r, err := {{$element}}Scanner(q)
 		if err != nil {
@@ -296,6 +298,7 @@ func QueryPaginated(ctx context.Context, db gnorm.DB, cursor *string, where []sq
 
 	// Collect the ID's together, and use them to fetch the full objects.  We do this in two stages because sometimes we will explicitly replace the auto-generated query used for this function, full{{$primaryKey.Name}}PaginatedQuery.  This allows us to use custom queries that are tailored to allow sorting and filtering by fields that may not be available in just the parent and child (version) tables alone.
 	var fetchIDs []{{$primaryKey.Type}}
+	defer q.Close()
 	for q.Next() {
 		var r {{$primaryKey.Type}}
 
