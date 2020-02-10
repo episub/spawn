@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -45,6 +46,13 @@ type Session interface {
 	Destroy(context.Context) error
 	GetExpiry() time.Time
 	GetID() string
+}
+
+// SafeError string of a safe error
+type SafeError string
+
+func (s SafeError) Error() string {
+	return string(s)
 }
 
 // NewAuth Returns a new Auth struct
@@ -179,7 +187,7 @@ func (a Auth) CustomAuthenticationHandler(
 
 		if err != nil {
 			w.WriteHeader(http.StatusForbidden)
-			fmt.Fprintf(w, invalidLoginMsg)
+			fmt.Fprintf(w, getSafeError(err, invalidLoginMsg))
 			log.WithFields(logrus.Fields{"error": err}).Info("Failed to validate user authentication request")
 			return
 		}
@@ -188,7 +196,7 @@ func (a Auth) CustomAuthenticationHandler(
 
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, invalidLoginMsg)
+			fmt.Fprintf(w, getSafeError(err, invalidLoginMsg))
 			log.WithField("error", err).Error("Failed to create session")
 			return
 		}
@@ -310,4 +318,14 @@ func PolicyMW(prefix string, objectName string, payload DefaultPayloadFunc) func
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// getSafeError returns string if safe error
+func getSafeError(err error, defaultMessage string) string {
+	var serr SafeError
+	if errors.As(err, &serr) {
+		return serr.Error()
+	}
+
+	return defaultMessage
 }
