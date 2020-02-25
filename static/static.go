@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -122,6 +123,7 @@ func NewUnionFile(path string) (UnionFile, error) {
 // Name Returns the file name
 func (f *UnionFile) Name() (string, error) {
 	path := CanonicalPath(f.Path)
+	log.Printf("CANONICAL PATH: %s", path)
 
 	if f.fileInfo == nil {
 		info, err := os.Stat(path)

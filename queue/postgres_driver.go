@@ -73,7 +73,7 @@ func (d *PostgresDriver) name() string {
 }
 
 // AddTask Adds a task to the queue
-func (d *PostgresDriver) addTask(taskName string, taskKey string, data map[string]interface{}) error {
+func (d *PostgresDriver) addTask(taskName string, taskKey string, doAfter time.Time, data map[string]interface{}) error {
 	// Store data as json:
 	dataString, err := json.Marshal(data)
 
@@ -81,14 +81,15 @@ func (d *PostgresDriver) addTask(taskName string, taskKey string, data map[strin
 	// Convert
 	_, err = d.pool.Exec(`
 INSERT INTO `+d.schemaTable()+`
-	(`+d.primaryKey()+`, data, state, task_key, task_name, created_at, last_attempted, last_attempt_message)
-VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'Created')`,
+	(`+d.primaryKey()+`, data, state, task_key, task_name, created_at, last_attempted, last_attempt_message, do_after)
+VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'Created', $7)`,
 		dataString,
 		"READY",
 		taskKey,
 		taskName,
 		created,
 		created,
+		doAfter,
 	)
 
 	return err
@@ -113,11 +114,14 @@ func (d *PostgresDriver) pop() (Task, error) {
 WITH u AS (
 	SELECT ` + d.primaryKey() + `
 	FROM ` + d.schemaTable() + `
-	WHERE state IN ('` + string(TaskReady) + `')
-	OR (
-		last_attempted < Now() - INTERVAL '10 minute'
-		AND state IN ('` + string(TaskInProgress) + `', '` + string(TaskRetry) + `')
+	WHERE (
+		state IN ('` + string(TaskReady) + `')
+		OR (
+			last_attempted < Now() - INTERVAL '10 minute'
+			AND state IN ('` + string(TaskInProgress) + `', '` + string(TaskRetry) + `')
+		)
 	)
+	AND do_after < Now()
 	ORDER BY last_attempted ASC
 	LIMIT 1
 )

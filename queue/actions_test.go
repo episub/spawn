@@ -30,7 +30,7 @@ type ExampleTaskAction struct {
 	result chan bool
 }
 
-func (ea *ExampleTaskAction) Do(task Task) (TaskResult, TaskMessage) {
+func (ea *ExampleTaskAction) Do(task Task) (TaskResult, string) {
 	ea.result <- true
-	return TaskResultSuccess, TaskMessage("Done")
+	return TaskResultSuccess, "Done"
 }

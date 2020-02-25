@@ -2,6 +2,7 @@ package queue
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"reflect"
 	"testing"
@@ -20,9 +21,10 @@ func init() {
 	dbUser := os.Getenv("PG_USER")
 	dbPass := os.Getenv("PG_PASS")
 	dbName := os.Getenv("PG_DB")
+	dbSchema := os.Getenv("PG_SCHEMA")
 	dbTable := os.Getenv("PG_TABLE")
 
-	mDriver, err := NewPostgresDriver(dbUser, dbPass, dbHost, dbName, dbTable)
+	mDriver, err := NewPostgresDriver(dbUser, dbPass, dbHost, dbName, dbSchema, dbTable)
 
 	if err != nil {
 		panic(err)
@@ -46,7 +48,7 @@ func TestClearQueue(t *testing.T) {
 			continue
 		}
 
-		err = d.addTask("testClear", "somekey", map[string]interface{}{})
+		err = d.addTask("testClear", "somekey", time.Now(), map[string]interface{}{})
 
 		if err != nil {
 			t.Error(err)
@@ -96,7 +98,7 @@ func TestAddTask(t *testing.T) {
 		}
 		taskName := "testMSAddTask"
 
-		err := d.addTask(taskName, taskKey, data)
+		err := d.addTask(taskName, taskKey, time.Now(), data)
 
 		if err != nil {
 			t.Error(err)
@@ -135,7 +137,7 @@ func TestPop(t *testing.T) {
 		}
 
 		// Add a task to test with:
-		err = d.addTask(taskName, taskKey, data)
+		err = d.addTask(taskName, taskKey, time.Now(), data)
 
 		if err != nil {
 			t.Error(err)
@@ -196,8 +198,9 @@ func TestCompleteTask(t *testing.T) {
 		}
 
 		// Create tasks:
-		for _, task := range tasks {
-			err = d.addTask(task.Name, task.Key, task.Data)
+		for i, task := range tasks {
+			log.Printf("Adding %d", i)
+			err = d.addTask(task.Name, task.Key, time.Now(), task.Data)
 
 			time.Sleep(100 * time.Millisecond)
 
@@ -207,7 +210,7 @@ func TestCompleteTask(t *testing.T) {
 			}
 		}
 
-		// Pop most recent, and it should be the "order"=3 task
+		// Pop, contrary to name, should fetch oldest first:
 
 		task, err := d.pop()
 
@@ -216,8 +219,8 @@ func TestCompleteTask(t *testing.T) {
 			continue
 		}
 
-		if int(task.Data["order"].(float64)) != 3 {
-			t.Errorf("Expected task to have 'order' of 3, but was %d", int(task.Data["order"].(float64)))
+		if int(task.Data["order"].(float64)) != 1 {
+			t.Errorf("Expected task to have 'order' of 1, but was %d", int(task.Data["order"].(float64)))
 			continue
 		}
 
@@ -230,9 +233,16 @@ func TestCompleteTask(t *testing.T) {
 			continue
 		}
 
-		// Pop new task, to check that we have none returned:
+		// Pop new task, to check that we have none returned after third:
 
-		task, err = d.pop()
+		for i := 0; i < 2; i++ {
+			err = popAndComplete(d)
+			if err != nil {
+				t.Error(err)
+			}
+		}
+
+		_, err = d.pop()
 
 		if err != ErrNoTasks {
 			if err != nil {
@@ -244,6 +254,15 @@ func TestCompleteTask(t *testing.T) {
 		}
 
 	}
+}
+
+func popAndComplete(d Driver) error {
+	task, err := d.pop()
+	if err != nil {
+		return err
+	}
+
+	return d.complete(task.id, "None")
 }
 
 func TestPopNotDoneYet(t *testing.T) {
@@ -279,7 +298,7 @@ func TestPopNotDoneYet(t *testing.T) {
 		// Create the first two tasks:
 		for i := 0; i < 2; i++ {
 			task := tasks[i]
-			err = d.addTask(task.Name, task.Key, task.Data)
+			err = d.addTask(task.Name, task.Key, time.Now(), task.Data)
 
 			time.Sleep(100 * time.Millisecond)
 
@@ -289,8 +308,7 @@ func TestPopNotDoneYet(t *testing.T) {
 			}
 		}
 
-		// Pop most recent, and it should be the "order"=2 task
-
+		// Pop oldest, and it should be the "order"=2 task
 		task, err := d.pop()
 
 		if err != nil {
@@ -298,14 +316,14 @@ func TestPopNotDoneYet(t *testing.T) {
 			continue
 		}
 
-		if int(task.Data["order"].(float64)) != 2 {
-			t.Errorf("Expected task to have 'order' of 2, but was %d", int(task.Data["order"].(float64)))
+		if int(task.Data["order"].(float64)) != 1 {
+			t.Errorf("Expected task to have 'order' of 1, but was %d", int(task.Data["order"].(float64)))
 			continue
 		}
 
 		// Add the third task:
 
-		err = d.addTask(tasks[2].Name, tasks[2].Key, tasks[2].Data)
+		err = d.addTask(tasks[2].Name, tasks[2].Key, time.Now(), tasks[2].Data)
 		if err != nil {
 			t.Error(err)
 			continue
@@ -320,7 +338,7 @@ func TestPopNotDoneYet(t *testing.T) {
 			continue
 		}
 
-		// Pop new task, to check that task with order 3 is returned:
+		// Pop new task, to check that task with order 2 is returned:
 
 		task, err = d.pop()
 
@@ -329,8 +347,8 @@ func TestPopNotDoneYet(t *testing.T) {
 			continue
 		}
 
-		if int(task.Data["order"].(float64)) != 3 {
-			t.Errorf("Expected task to have 'order' of 3, but was %d", int(task.Data["order"].(float64)))
+		if int(task.Data["order"].(float64)) != 2 {
+			t.Errorf("Expected task to have 'order' of 2, but was %d", int(task.Data["order"].(float64)))
 			continue
 		}
 
@@ -360,7 +378,7 @@ func TestCancelTask(t *testing.T) {
 
 		// Create task:
 		for _, task := range tasks {
-			err = d.addTask(task.Name, task.Key, task.Data)
+			err = d.addTask(task.Name, task.Key, time.Now(), task.Data)
 			if err != nil {
 				t.Error(err)
 				continue
@@ -423,7 +441,7 @@ func TestFailTask(t *testing.T) {
 
 		// Create task:
 		for _, task := range tasks {
-			err = d.addTask(task.Name, task.Key, task.Data)
+			err = d.addTask(task.Name, task.Key, time.Now(), task.Data)
 			if err != nil {
 				t.Error(err)
 				continue
@@ -495,7 +513,7 @@ func TestTaskOrders(t *testing.T) {
 
 		// Create the tasks
 		for _, task := range tasks {
-			err = d.addTask(task.Name, task.Key, task.Data)
+			err = d.addTask(task.Name, task.Key, time.Now(), task.Data)
 
 			time.Sleep(100 * time.Millisecond)
 
@@ -517,7 +535,6 @@ func TestTaskOrders(t *testing.T) {
 
 			if fetched.Key != task.Key {
 				t.Errorf("Expected task with key %s, but had key %s", task.Key, fetched.Key)
-				panic("afwe")
 			}
 
 			err = d.complete(fetched.id, "Completed")
@@ -541,7 +558,7 @@ func TestTaskRetry(t *testing.T) {
 			continue
 		}
 
-		err = d.addTask("testTaskRetry1", taskKey, map[string]interface{}{})
+		err = d.addTask("testTaskRetry1", taskKey, time.Now(), map[string]interface{}{})
 
 		if err != nil {
 			t.Error(err)

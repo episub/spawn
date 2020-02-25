@@ -8,7 +8,7 @@ import (
 // Driver Manages the connection to the background queue to keep track of tasks
 type Driver interface {
 	clear() error // Clears the queue.  Obviously, be careful
-	addTask(taskName string, taskKey string, data map[string]interface{}) error
+	addTask(taskName string, taskKey string, doAfter time.Time, data map[string]interface{}) error
 	getTask(taskName string) (Task, error) // Grabs most recent entry for that task name
 	name() string                          // Returns a name for the driver
 

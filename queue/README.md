@@ -131,6 +131,7 @@ CREATE TABLE public.message_queue(
 	last_attempted timestamptz NOT NULL DEFAULT Now(),
 	state varchar(16) NOT NULL,
 	last_attempt_message varchar NOT NULL,
+  do_after timestamptz NOT NULL DEFAULT Now(),
 	CONSTRAINT message_queue_id_pk PRIMARY KEY (message_queue_id)
 );
 ```

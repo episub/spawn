@@ -1,5 +1,7 @@
 package queue
 
+import "time"
+
 // SyncClient Client for interacting with the queue
 type SyncClient struct {
 	driver Driver
@@ -11,6 +13,6 @@ func NewSyncClient(driver Driver) SyncClient {
 }
 
 // AddTask Adds a task to the queue
-func (s *SyncClient) AddTask(taskName string, taskKey string, data map[string]interface{}) error {
-	return s.driver.addTask(taskName, taskKey, data)
+func (s *SyncClient) AddTask(taskName string, taskKey string, doAfter time.Time, data map[string]interface{}) error {
+	return s.driver.addTask(taskName, taskKey, doAfter, data)
 }
