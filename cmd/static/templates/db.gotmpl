@@ -132,9 +132,9 @@ func PaginateCursorWhere(cursor string, order Order, sqlstr string, field string
 	compLeft, compRight := PaginateCompare(order.Fields, field, sqlstr)
 
 	if len(compLeft) > 0 {
-		sql = fmt.Sprintf(" (%s, todo_id) %s (%s, ?)", compLeft, lgt, compRight)
+		sql = fmt.Sprintf(" (%s, %s) %s (%s, ?)", compLeft, field, lgt, compRight)
 	} else {
-		sql = fmt.Sprintf(" (todo_id) %s (?)", lgt)
+		sql = fmt.Sprintf(" (%s) %s (?)", field, lgt)
 	}
 	for range order.Fields {
 		args = append(args, cursor)

@@ -421,6 +421,14 @@ func Upsert(ctx context.Context, db gnorm.DB, o Row) (Row, error) {
 	span, _ := opentracing.StartSpanFromContext(ctx, "Upsert_{{.Table.Name}}")
 	defer span.Finish()
 	
+	return UpsertOnConflict(ctx, "({{ join .Table.PrimaryKeys.DBNames.Sorted ", " }})", db, o)
+}
+
+// UpsertOnConflict Creates or updates record based on input, allowing user
+// to provide a custom on conflict
+func UpsertOnConflict(ctx context.Context, onConflict string, db gnorm.DB, o Row) (Row, error) {
+	span, _ := opentracing.StartSpanFromContext(ctx, "UpsertOnConflict_{{.Table.Name}}")
+	defer span.Finish()
 
 	{{if .Table.HasPrimaryKey }}
 	// If UUID is zero, that suggests this is a creation, so let us provide an
@@ -434,15 +442,6 @@ func Upsert(ctx context.Context, db gnorm.DB, o Row) (Row, error) {
 	}
 	{{end}}
 
-	return UpsertOnConflict(ctx, "{{ join .Table.PrimaryKeys.DBNames.Sorted ", " }}", db, o)
-}
-
-// UpsertOnConflict Creates or updates record based on input, allowing user
-// to provide a custom on conflict
-func UpsertOnConflict(ctx context.Context, onConflict string, db gnorm.DB, o Row) (Row, error) {
-	span, _ := opentracing.StartSpanFromContext(ctx, "UpsertOnConflict_{{.Table.Name}}")
-	defer span.Finish()
-
 	var err error
 	if err = prepareCreate(ctx, &o); err != nil {
 		return o, err
@@ -454,7 +453,7 @@ func UpsertOnConflict(ctx context.Context, onConflict string, db gnorm.DB, o Row
 		`) VALUES (` +
 		{{- $vals := numbers 1 (len .Table.Columns) }}
 		`${{ join $vals ", $" }}` +
-		`) ON CONFLICT (` + onConflict + `) DO UPDATE SET (` +
+		`) ON CONFLICT ` + onConflict + ` DO UPDATE SET (` +
 		`{{ join .Table.Columns.DBNames.Sorted ", " }}` +
 		`) = (` +
 		`EXCLUDED.{{ join .Table.Columns.DBNames.Sorted ", EXCLUDED." }}` +

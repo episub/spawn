@@ -10,6 +10,7 @@ import (
 	"github.com/99designs/gqlgen/graphql"
 	sq "github.com/Masterminds/squirrel"
 	"github.com/vektah/gqlparser/gqlerror"
+	"github.com/gofrs/uuid"
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -109,19 +110,27 @@ func query{{.PluralModelName}}(ctx context.Context, first *int, after *string, l
 		return o, err
 	}
 
-	o.PageInfo = pi
+	o.PageInfo = &pi
 	o.TotalCount = count
-	o.Edges = make([]models.{{.ModelName}}Edge, len(r))
+	o.Edges = make([]*models.{{.ModelName}}Edge, len(r))
 
 	for i, t := range r {
+		node := t
+		var edge models.{{.ModelName}}Edge
 		{{if eq .PrimaryKeyType "string"}}
-		o.Edges[i] = models.{{.ModelName}}Edge{Cursor: t.{{.PrimaryKey}}, Node: t}
+		edge = models.{{.ModelName}}Edge{Cursor: node.{{.PrimaryKey}}, Node: &node}
 		{{else if eq .PrimaryKeyType "int"}}
-		o.Edges[i] = models.{{.ModelName}}Edge{Cursor: fmt.Sprintf("%d", t.{{.PrimaryKey}}), Node: t}
+		edge = models.{{.ModelName}}Edge{Cursor: fmt.Sprintf("%d", node.{{.PrimaryKey}}), Node: &node}
+		{{else if eq .PrimaryKeyType "uuid.UUID"}}
+		edge = models.{{.ModelName}}Edge{Cursor: node.{{.PrimaryKey}}.String(), Node: &node}
 		{{else}}
 		panic("Primary key type {{.PrimaryKeyType}} not supported yet")
 		{{end}}
+		o.Edges[i] = &edge
 	}
+
+	o.PageInfo.EndCursor = &o.Edges[len(o.Edges) - 1].Cursor
+	o.PageInfo.StartCursor = &o.Edges[0].Cursor
 
 	return o, err
 }

@@ -4,7 +4,7 @@ go 1.12
 
 require (
 	cloud.google.com/go v0.37.2
-	github.com/99designs/gqlgen v0.9.0
+	github.com/99designs/gqlgen v0.11.1
 	github.com/OneOfOne/xxhash v1.2.5 // indirect
 	github.com/caarlos0/env v3.5.0+incompatible
 	github.com/cockroachdb/apd v1.1.0 // indirect
