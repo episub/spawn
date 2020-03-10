@@ -153,9 +153,9 @@ func (a *Auth) CheckAuthenticated(w http.ResponseWriter, r *http.Request) (User,
 
 // SetUnauthorised Used to present a standard unauthorised response
 func (a Auth) SetUnauthorised(w http.ResponseWriter, r *http.Request) {
+	a.logout(w, r)
 	w.Header().Add("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
-	a.logout(w, r)
 	gerr := gqlerror.Error{}
 	gerr.Message = "Invalid or expired session"
 	gerr.Extensions = map[string]interface{}{
