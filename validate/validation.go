@@ -210,3 +210,16 @@ func IntsEqual(ctx context.Context, field string, a, b int, msg string) bool {
 
 	return true
 }
+
+// MaxAllowedDataSize determines if the data size meets the allowed size
+func MaxAllowedDataSize(data []byte, text string) error {
+	byteSizeLimit := 10000000 // Megabytes in bytes
+	megabyteSize := 1000000   // Value of 1 megabyte in bytes
+	finalSize := byteSizeLimit / megabyteSize
+
+	if len(data) > byteSizeLimit {
+		return fmt.Errorf("%s size cannot exceed %d megabyte(s)", text, finalSize)
+	}
+
+	return nil
+}
