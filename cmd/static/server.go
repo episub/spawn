@@ -1,13 +1,11 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
 
-	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/handler"
 	"github.com/caarlos0/env"
 	api "{{.}}/graph"
@@ -16,7 +14,6 @@ import (
 	"github.com/go-chi/chi/middleware"
 	"github.com/opentracing-contrib/go-stdlib/nethttp"
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/opentracing/opentracing-go/ext"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	jaegerConfig "github.com/uber/jaeger-client-go/config"
@@ -105,7 +102,6 @@ func startRouters(tracer opentracing.Tracer) {
 		r.Use(middleware.Timeout(60 * time.Second))
 		r.Handle("/", handler.GraphQL(
 			api.NewExecutableSchema(graphqlConfig()),
-			handler.RequestMiddleware(requestMiddleware()),
 		))
 	})
 
@@ -146,18 +142,4 @@ func liveHandler(w http.ResponseWriter, r *http.Request) {
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	log.Info("Health request received")
 	w.WriteHeader(http.StatusOK)
-}
-
-func requestMiddleware() graphql.RequestMiddleware {
-	return func(ctx context.Context, next func(ctx context.Context) []byte) []byte {
-		requestContext := graphql.GetRequestContext(ctx)
-		span, ctx := opentracing.StartSpanFromContext(ctx, requestContext.RawQuery)
-		defer span.Finish()
-		ext.SpanKind.Set(span, "server")
-		ext.Component.Set(span, "gqlgen")
-
-		res := next(ctx)
-
-		return res
-	}
 }
