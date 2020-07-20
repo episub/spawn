@@ -105,7 +105,6 @@ func startRouters(tracer opentracing.Tracer) {
 		r.Use(middleware.Timeout(60 * time.Second))
 		r.Handle("/", handler.GraphQL(
 			api.NewExecutableSchema(graphqlConfig()),
-			handler.RequestMiddleware(requestMiddleware()),
 		))
 	})
 
@@ -146,18 +145,4 @@ func liveHandler(w http.ResponseWriter, r *http.Request) {
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	log.Info("Health request received")
 	w.WriteHeader(http.StatusOK)
-}
-
-func requestMiddleware() graphql.RequestMiddleware {
-	return func(ctx context.Context, next func(ctx context.Context) []byte) []byte {
-		requestContext := graphql.GetRequestContext(ctx)
-		span, ctx := opentracing.StartSpanFromContext(ctx, requestContext.RawQuery)
-		defer span.Finish()
-		ext.SpanKind.Set(span, "server")
-		ext.Component.Set(span, "gqlgen")
-
-		res := next(ctx)
-
-		return res
-	}
 }
