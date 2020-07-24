@@ -454,9 +454,9 @@ func UpsertOnConflict(ctx context.Context, onConflict string, db gnorm.DB, o Row
 		{{- $vals := numbers 1 (len .Table.Columns) }}
 		`${{ join $vals ", $" }}` +
 		`) ON CONFLICT ` + onConflict + ` DO UPDATE SET (` +
-		`{{ join .Table.Columns.DBNames.Sorted ", " }}` +
+		`{{ join $nonPKDBNames ", " }}` +
 		`) = (` +
-		`EXCLUDED.{{ join .Table.Columns.DBNames.Sorted ", EXCLUDED." }}` +
+		`EXCLUDED.{{ join $nonPKDBNames ", EXCLUDED." }}` +
 		`)`
 
 	// run query
