@@ -18,7 +18,7 @@ import (
 )
 
 var packageName string
-var packageRx = regexp.MustCompile(`^module ([a-zA-Z0-9.\-\/]+)$`)
+var packageRx = regexp.MustCompile(`^module (.+)$`)
 
 // Execute Run spawn
 func Execute() {
