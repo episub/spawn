@@ -18,6 +18,7 @@ import (
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/sirupsen/logrus"
 	"github.com/vektah/gqlparser/gqlerror"
+	"github.com/vektah/gqlparser/v2/ast"
 	reflections "gopkg.in/oleiade/reflections.v1"
 )
 
@@ -378,14 +379,15 @@ func fullFieldList(rctx graphql.ResolverContext, useIndex bool) []string {
 
 	for i, p := range path {
 		t := reflect.TypeOf(p).String()
+		_ = i
 		switch t {
-		case "string":
-			s, _ := p.(string)
-			fields = append(fields, s)
-		case "int":
+		case "ast.PathName":
+			s, _ := p.(ast.PathName)
+			fields = append(fields, string(s))
+		case "ast.PathIndex":
 			if useIndex {
-				v, _ := p.(int)
-				fields = append(fields, fmt.Sprintf("%d", v))
+				v, _ := p.(ast.PathIndex)
+				fields = append(fields, fmt.Sprintf("%d", int(v)))
 			}
 		default:
 			log.Printf("Unknown type %s", t)

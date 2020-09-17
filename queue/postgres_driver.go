@@ -27,7 +27,7 @@ func (p PostgresDriver) schemaTable() string {
 }
 
 // NewPostgresDriver Returns a new postgres driver, initialised.  readTimeout is in seconds
-func NewPostgresDriver(dbUser string, dbPass string, dbHost string, dbName string, dbSchema string, dbTable string) (*PostgresDriver, error) {
+func NewPostgresDriver(dbUser string, dbPass string, dbHost string, dbName string, dbPort string, dbSchema string, dbTable string) (*PostgresDriver, error) {
 	var err error
 
 	d := &PostgresDriver{
@@ -35,7 +35,11 @@ func NewPostgresDriver(dbUser string, dbPass string, dbHost string, dbName strin
 		schemaName: dbSchema,
 	}
 
-	connString := fmt.Sprintf("user=%s dbname=%s password=%s host=%s sslmode=disable", dbUser, dbName, dbPass, dbHost)
+	if len(dbPort) == 0 {
+		dbPort = "5432"
+	}
+
+	connString := fmt.Sprintf("user=%s dbname=%s password=%s host=%s sslmode=disable port=%s", dbUser, dbName, dbPass, dbHost, dbPort)
 	connConfig, err := pgx.ParseConnectionString(connString)
 
 	if err != nil {

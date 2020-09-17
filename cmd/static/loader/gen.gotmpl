@@ -13,7 +13,7 @@ package loader
 import (
 	"{{.Config.PackageName}}/models"
 	"{{.Config.PackageName}}/gnorm"
-	"{{.Config.PackageName}}/gnorm/{{.Config.Generate.SchemaName}}/{{$package}}"
+	"{{.Config.PackageName}}/gnorm/{{.SchemaName}}/{{$package}}"
 	"{{.ModelPackage}}"
 	sq "github.com/Masterminds/squirrel"
 	"github.com/episub/spawn/validate"
@@ -219,7 +219,7 @@ func (l *PostgresLoader) run{{.ModelName}}Batcher() {
 			for _, r := range {{camel .ModelName}}FRs {
 				for _, c := range {{camel .ModelName}}s {
 					
-					if c.{{if .Versioned}}Parent.{{end}}{{.ModelName}}ID == r.{{.ModelName}}ID {
+					if c.{{if .Versioned}}Parent.{{end}}{{.PK}} == r.{{.ModelName}}ID {
 						r.Reply <- {{.ModelName}}FetchReply{ Row: c, Error: nil}
 						continue OUTER
 					}

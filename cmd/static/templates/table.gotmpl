@@ -50,6 +50,8 @@ import (
 		"{{.}}"
 		{{- end}}
 	{{- end}}
+	"sort"
+
 	"github.com/jackc/pgx"
 	"github.com/lib/pq"
 	"github.com/opentracing/opentracing-go/log"
@@ -67,7 +69,7 @@ type Row struct {
 {{- range .Table.PrimaryKeys.DBNames.Sorted }}{{ with (index $colsByName .)}}
 	{{ .Name }} {{ if .IsArray }}[]{{ end }}{{ .Type }} `json:"{{.DBName}}"` // {{ .DBName }} (PK){{end}}
 {{- end }}
-{{- range $nonPKDBNames }}{{ with (index $colsByName .) }}
+{{- range $nonPKDBNames }}{{ with (index $colsByName .) }}"
 	{{ .Name }} {{ if .IsArray }}[]{{ end }}{{ .Type }} `json:"{{.DBName}}"` // {{ .DBName }}{{end}}
 {{- end }}
 }
@@ -89,6 +91,12 @@ var (
 	{{.Name}}Col = "{{ .DBName }}"{{end}}
 {{- end}}
 )
+
+var fieldsList = []string{
+{{- range .Table.Columns.DBNames.Sorted }}{{with index $colsByName .}}
+	{{.Name}}Col,{{end}}
+{{- end}}
+}
 
 // Scanner Scans the provided row into a Row struct and returns it
 func Scanner(row gnorm.Scanner) (Row, error) {
@@ -414,6 +422,32 @@ func One{{$element}}(ctx context.Context, db {{$rootPkg}}.DB, where []sq.Sqlizer
 {{end}}
 {{end}}
 
+// CustomQuery Retrieves rows using provided sql statement.  Leave a %s entry in the query to fill each of the field names and table name.  E.g., "SELECT %s FROM %s"
+func CustomQuery(ctx context.Context, db {{$rootPkg}}.DB, query string, args ...interface{}) ([]Row, error) {
+	span, ctx := opentracing.StartSpanFromContext(ctx, "CustomQuery {{.Table.Name}}")
+	defer span.Finish()
+
+	var fields = `{{ join .Table.Columns.DBNames.Sorted ", " }}`
+	var table = `{{$schema}}.{{ $table }}`
+	var sqlstr = fmt.Sprintf(query, fields, table)
+	var vals []Row
+
+	q, err := db.Query(sqlstr, args...)
+	if err != nil {
+		return nil, err
+	}
+	for q.Next() {
+		r, err := Scanner(q)
+
+		if err != nil {
+			return nil, err
+		}
+
+		vals = append(vals, r)
+	}
+	return vals, nil
+}
+
 {{if $isView}}
 {{else}}
 // Upsert Creates or updates record based on input
@@ -431,6 +465,7 @@ func UpsertOnConflict(ctx context.Context, onConflict string, db gnorm.DB, o Row
 	defer span.Finish()
 
 	{{if .Table.HasPrimaryKey }}
+	{{if eq $primaryKey.DBType "uuid"}}
 	// If UUID is zero, that suggests this is a creation, so let us provide an
 	// explicit new ID:
 	if o.{{$primaryKey.Name}} == uuid.Nil {
@@ -440,6 +475,7 @@ func UpsertOnConflict(ctx context.Context, onConflict string, db gnorm.DB, o Row
 			return Row{}, err
 		}
 	}
+	{{end}}
 	{{end}}
 
 	var err error
@@ -468,17 +504,35 @@ func UpsertOnConflict(ctx context.Context, onConflict string, db gnorm.DB, o Row
 	return o,nil
 }
 
+type InsertOptions struct {
+	IncludeFields []string // If != 0, then we only batch insert these fields
+}
+
 // BatchInsert Creates provided entries in one attempt
-func BatchInsert(ctx context.Context, db gnorm.DB, rows []Row) error {
+func BatchInsert(
+	ctx context.Context,
+	db gnorm.DB,
+	rows []Row,
+	options InsertOptions,
+) error {
 	span, _ := opentracing.StartSpanFromContext(ctx, "BatchInsert_{{.Table.Name}}")
 	defer span.Finish()
+
+	var rowCount = {{len .Table.Columns}}
+	if len(options.IncludeFields) > 0 {
+		rowCount = len(options.IncludeFields)
+		// By putting strings alphabetically ordered, we can assume the same order
+		// when adding arguments.  If any fields don't exist, our count at the end
+		// of looping will not match.
+		sort.Strings(options.IncludeFields)
+	}
 
 	// No rows, so do nothing
 	if len(rows) == 0 {
 		return nil
 	}
 
-	args := make([]interface{}, {{len .Table.Columns}} * len(rows))
+	args := make([]interface{}, rowCount * len(rows))
 	inserts := make([]string, len(rows))
 
 	var err error
@@ -487,26 +541,38 @@ func BatchInsert(ctx context.Context, db gnorm.DB, rows []Row) error {
 			return err
 		}
 
-		argNumbers := make([]string, {{len .Table.Columns}})
+		argNumbers := make([]string, rowCount)
 
-		globalIndex := i * {{len .Table.Columns}}
+		globalIndex := i * rowCount
 		index := 0
 
-		// Append the args:
-		{{- range $index, $element := .Table.Columns.Names.Sorted}}
-		args[globalIndex] = o.{{ $element }}
-		argNumbers[index] = fmt.Sprintf("%d", globalIndex+1)
-		globalIndex++
-		index++
-		{{end -}}
+
+		{{- range .Table.Columns.DBNames.Sorted}}{{with index $colsByName .}}
+		if len(options.IncludeFields) == 0 || "{{.DBName}}" == options.IncludeFields[index] {
+			args[globalIndex] = o.{{ .Name }}
+			argNumbers[index] = fmt.Sprintf("%d", globalIndex+1)
+			globalIndex++
+			index++
+		}
+		{{end}}
+		{{end}}
+
+		if len(options.IncludeFields) != 0 && len(options.IncludeFields) != index {
+			// If any field did not exist, it should be the most recent one in the list
+			return fmt.Errorf("Unknown field %s", options.IncludeFields[index])
+		}
 
 		// Add the value
 		inserts[i] = fmt.Sprintf("($%s)", strings.Join(argNumbers, ", $"))
 	}
 
 	// sql query
+	insertFields := "{{ join .Table.Columns.DBNames.Sorted ", " }}"
+	if len(options.IncludeFields) > 0 {
+		insertFields = strings.Join(options.IncludeFields, ", ")
+	}
 	var sqlstr = `INSERT INTO {{$schema}}.{{$table}} (` +
-		`{{ join .Table.Columns.DBNames.Sorted ", " }}` +
+		insertFields +
 		`) VALUES ` + strings.Join(inserts, ", ")
 
 	// run query

@@ -317,6 +317,7 @@ func postgresBuild(config Config, folder string) error {
 		}
 
 		err = postgresTemplate.Execute(f, struct {
+			SchemaName     string
 			Config         Config
 			Timestamp      time.Time
 			ModelName      string
@@ -340,6 +341,7 @@ func postgresBuild(config Config, folder string) error {
 			Create:         b.Create,
 			Query:          b.Query,
 			Versioned:      b.Versioned,
+			SchemaName:     pickFirst(b.SchemaName, config.Generate.SchemaName),
 		})
 		f.Close()
 
@@ -406,27 +408,29 @@ func resolverBuild(config Config, folder string) error {
 		}
 
 		err = resolverTemplate.Execute(f, struct {
-			Config          Config
-			Timestamp       time.Time
-			ModelName       string
-			PluralModelName string
-			PrimaryKey      string
-			PrimaryKeyType  string
-			Create          bool
-			Update          bool
-			PrepareCreate   bool
-			Query           bool
+			Config            Config
+			Timestamp         time.Time
+			ModelName         string
+			SingularModelName string
+			PluralModelName   string
+			PrimaryKey        string
+			PrimaryKeyType    string
+			Create            bool
+			Update            bool
+			PrepareCreate     bool
+			Query             bool
 		}{
-			Config:          config,
-			Timestamp:       time.Now(),
-			ModelName:       b.SingularModelName,
-			PluralModelName: b.PluralModelName,
-			PrimaryKey:      b.PrimaryKey,
-			PrimaryKeyType:  b.PrimaryKeyType,
-			Create:          b.Create,
-			Update:          b.Update,
-			PrepareCreate:   b.PrepareCreate,
-			Query:           b.Query,
+			Config:            config,
+			Timestamp:         time.Now(),
+			ModelName:         pickFirst(b.ModelName, b.SingularModelName),
+			SingularModelName: b.SingularModelName,
+			PluralModelName:   b.PluralModelName,
+			PrimaryKey:        b.PrimaryKey,
+			PrimaryKeyType:    b.PrimaryKeyType,
+			Create:            b.Create,
+			Update:            b.Update,
+			PrepareCreate:     b.PrepareCreate,
+			Query:             b.Query,
 		})
 		f.Close()
 
@@ -441,6 +445,16 @@ func resolverBuild(config Config, folder string) error {
 	}
 
 	return nil
+}
+
+func pickFirst(strs ...string) string {
+	for _, s := range strs {
+		if len(s) > 0 {
+			return s
+		}
+	}
+
+	return ""
 }
 
 func goImports(fileName string) error {

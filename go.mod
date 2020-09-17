@@ -28,7 +28,7 @@ require (
 	github.com/lib/pq v1.0.0
 	github.com/matryer/moq v0.0.0-20200607124540-4638a53893e6 // indirect
 	github.com/mattn/go-runewidth v0.0.4 // indirect
-	github.com/mitchellh/mapstructure v1.3.2 // indirect
+	github.com/mitchellh/mapstructure v1.3.2
 	github.com/nbutton23/zxcvbn-go v0.0.0-20180912185939-ae427f1e4c1d
 	github.com/open-policy-agent/opa v0.16.0
 	github.com/opentracing-contrib/go-stdlib v0.0.0-20190324214902-3020fec0e66b
@@ -39,6 +39,8 @@ require (
 	github.com/radovskyb/watcher v1.0.6
 	github.com/rakyll/statik v0.1.6 // indirect
 	github.com/satori/go.uuid v1.2.0 // indirect
+	github.com/sendgrid/rest v2.6.1+incompatible // indirect
+	github.com/sendgrid/sendgrid-go v3.6.3+incompatible
 	github.com/shopspring/decimal v0.0.0-20180709203117-cd690d0c9e24 // indirect
 	github.com/sirupsen/logrus v1.4.1
 	github.com/spf13/cobra v0.0.3 // indirect
@@ -50,6 +52,7 @@ require (
 	github.com/urfave/cli/v2 v2.2.0 // indirect
 	github.com/vektah/dataloaden v0.3.0 // indirect
 	github.com/vektah/gqlparser v1.1.2
+	github.com/vektah/gqlparser/v2 v2.0.1
 	gnorm.org/gnorm v1.0.0
 	go.uber.org/atomic v1.4.0 // indirect
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9

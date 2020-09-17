@@ -20,6 +20,7 @@ import (
 )
 
 type config struct {
+	EnableJaeger bool   `env:"ENABLE_JAEGER" envDefault:"false"`
 	ExternalPort int    `env:"PORT" envDefault:"8080"`
 	InternalPort int    `env:"INTERNAL_PORT" envDefault:"8585"`
 	Debug        bool   `env:"DEBUG" envDefault:"false"`
@@ -40,9 +41,16 @@ func main() {
 		log.Fatal(err)
 	}
 
-	tracer, closer := initJaeger("graphql")
-	if closer != nil {
-		defer closer.Close()
+	if cfg.EnableJaeger {
+		var closer io.Closer
+		tracer, closer = initJaeger("graphql")
+		if closer != nil {
+			defer closer.Close()
+		}
+
+		// StartSpanFromContext uses the global tracer, so we need to set it here to
+		// be our jaeger tracer
+		opentracing.SetGlobalTracer(tracer)
 	}
 
 	// StartSpanFromContext uses the global tracer, so we need to set it here to
@@ -114,7 +122,9 @@ func startRouters(tracer opentracing.Tracer) {
 // newRouter returns a new router with all default values set
 func newRouter(tracer opentracing.Tracer) chi.Router {
 	router := chi.NewRouter()
-	router.Use(Opentracing(tracer))
+	if cfg.EnableJaeger {
+		router.Use(Opentracing(tracer))
+	}
 
 	return router
 }

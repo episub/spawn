@@ -139,8 +139,7 @@ NoOverwriteGlobs = ["*.perm.go"]
 "varchar" = "string"
 # from "github.com/lib/pq/hstore"
 "hstore" = "hstore.Hstore"
-# note that the package name here has to be kept in sync with the RootPkg above.
-"jsonb" = "gnorm.Jsonb"
+"jsonb" = "[]byte"
 # the package name here needs to be kept in sync with the enum template's package name
 "bytea" = "gnorm.Bytea"
 
@@ -160,8 +159,7 @@ NoOverwriteGlobs = ["*.perm.go"]
 "hstore" = "hstore.Hstore"
 "integer" = "sql.NullInt64"
 "interval" = "*string"
-# note that the package name here has to be kept in sync with the RootPkg above.
-"jsonb" = "gnorm.Jsonb"
+"jsonb" = "*[]byte"
 "numeric" = "sql.NullFloat64"
 "smallint" = "sql.NullInt64"
 "text" = "sql.NullString"

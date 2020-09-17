@@ -24,6 +24,7 @@ type Generate struct {
 
 // ResolverGenerate Which resolver related things to generate code for
 type ResolverGenerate struct {
+	ModelName         string `yaml:"modelName"`
 	SingularModelName string `yaml:"singularName"`
 	PluralModelName   string `yaml:"pluralName"`
 	PrimaryKey        string `yaml:"primaryKey"`
@@ -36,6 +37,7 @@ type ResolverGenerate struct {
 
 // PostgresGenerate Which postgres helper functions to generate code for
 type PostgresGenerate struct {
+	SchemaName     string `yaml:"schemaName"`     // Name of schema for postgres,  overrides default when set
 	ModelName      string `yaml:"modelName"`      // Name of model used by GraphQL
 	ModelStruct    string `yaml:"modelStruct"`    // Struct to use for GraphQL model
 	ModelPackage   string `yaml:"modelPackage"`   // Path of the package containing the model

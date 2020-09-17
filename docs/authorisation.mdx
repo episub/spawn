@@ -18,6 +18,28 @@ It is expected that the user object is stored in the context prior to the Resolv
 
 For this example, complete the 'Initialise Project' steps for the Quickstart.  We won't use user authentication for this example.
 
+We need to load our policies.  In server.go, in your init area:
+
+```
+import (
+	sopa "github.com/episub/spawn/opa"
+	...
+)
+
+func main() {
+	...
+	// Load OPA policies
+	err = sopa.LoadBundle("policies/bundle")
+
+	if err != nil {
+		panic(err)
+	}
+	...
+}
+```
+
+Doing this will cause your policies folder to be loaded when the application starts and when the policies are updated.
+
 Create a new file `authorise.go` in the root folder:
 
 ```

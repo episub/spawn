@@ -50,6 +50,16 @@ func GetPointerString(val sql.NullString) *string {
 	return &val.String
 }
 
+func GetPointerStringFromUUID(val uuid.NullUUID) *string {
+	if !val.Valid {
+		return nil
+	}
+
+	s := val.UUID.String()
+
+	return &s
+}
+
 func GetNullTime(val *time.Time) (ns pq.NullTime) {
 	if val == nil {
 		return

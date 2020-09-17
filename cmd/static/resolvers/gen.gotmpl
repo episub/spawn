@@ -14,15 +14,15 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
-func (r *queryResolver) EditableUpdate{{.ModelName}}Fields(ctx context.Context, id string) ([]string, error) {
-	return editableUpdate{{.ModelName}}Fields(ctx, id)
+func (r *queryResolver) EditableUpdate{{.SingularModelName}}Fields(ctx context.Context, id string) ([]string, error) {
+	return editableUpdate{{.SingularModelName}}Fields(ctx, id)
 }
 
 {{if .Update}}
-// Update{{.ModelName}} Updates {{.ModelName}} with provided input
-func (r *mutationResolver) Update{{.ModelName}}(ctx context.Context, id string, u map[string]interface{}) (*models.{{.ModelName}}, error) {
+// Update{{.SingularModelName}} Updates {{.SingularModelName}} with provided input
+func (r *mutationResolver) Update{{.SingularModelName}}(ctx context.Context, id string, u map[string]interface{}) (*models.{{.SingularModelName}}, error) {
 	// Get allowed edit fields:
-	allowed, err := editableUpdate{{.ModelName}}Fields(ctx, id)
+	allowed, err := editableUpdate{{.SingularModelName}}Fields(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -50,15 +50,15 @@ func (r *mutationResolver) Update{{.ModelName}}(ctx context.Context, id string, 
 }
 {{end}}
 {{if .PrepareCreate}}
-// prepareCreate{{.ModelName}} Performs some pre-processing on the provided map.  Disable generation of this function and create your own if you require any pre-processing performed
-func prepareCreate{{.ModelName}}(ctx context.Context, i map[string]interface{}) error {
+// prepareCreate{{.SingularModelName}} Performs some pre-processing on the provided map.  Disable generation of this function and create your own if you require any pre-processing performed
+func prepareCreate{{.SingularModelName}}(ctx context.Context, i map[string]interface{}) error {
 	return nil
 }
 {{end}}
 {{if .Create}}
-// Create{{.ModelName}} Creates {{.ModelName}}
-func (r *mutationResolver) Create{{.ModelName}}(ctx context.Context, i map[string]interface{}) (*models.{{.ModelName}}, error) {
-	err := prepareCreate{{.ModelName}}(ctx, i)
+// Create{{.SingularModelName}} Creates {{.SingularModelName}}
+func (r *mutationResolver) Create{{.SingularModelName}}(ctx context.Context, i map[string]interface{}) (*models.{{.SingularModelName}}, error) {
+	err := prepareCreate{{.SingularModelName}}(ctx, i)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +74,7 @@ func (r *mutationResolver) Create{{.ModelName}}(ctx context.Context, i map[strin
 }
 {{end}}
 {{if .Query}}
-func query{{.PluralModelName}}(ctx context.Context, first *int, after *string, last *int, before *string, cf *models.{{.ModelName}}Filter, sortField *models.{{.ModelName}}Sort, sortDirection *models.SortDirection, where []sq.Sqlizer) (o models.{{.PluralModelName}}Connection, err error) {
+func query{{.PluralModelName}}(ctx context.Context, first *int, after *string, last *int, before *string, cf *models.{{.SingularModelName}}Filter, sortField *models.{{.SingularModelName}}Sort, sortDirection *models.SortDirection, where []sq.Sqlizer) (o models.{{.PluralModelName}}Connection, err error) {
 	span, ctx := opentracing.StartSpanFromContext(ctx, "query{{.PluralModelName}}")
 	defer span.Finish()
 
@@ -84,7 +84,7 @@ func query{{.PluralModelName}}(ctx context.Context, first *int, after *string, l
 	if sortField != nil {
 		var err error
 
-		f.Order, err = sort{{.ModelName}}(ctx, *sortField, f.Order)
+		f.Order, err = sort{{.SingularModelName}}(ctx, *sortField, f.Order)
 
 		if err != nil {
 			return o, fmt.Errorf("Cannot sort by field %s: %s", sortField, err)
@@ -94,7 +94,7 @@ func query{{.PluralModelName}}(ctx context.Context, first *int, after *string, l
 	// Configure the where clauses:
 	if cf != nil {
 		var fw []sq.Sqlizer
-		fw, err = filter{{.ModelName}}(ctx, *cf)
+		fw, err = filter{{.SingularModelName}}(ctx, *cf)
 		if err != nil {
 			return
 		}
@@ -112,17 +112,17 @@ func query{{.PluralModelName}}(ctx context.Context, first *int, after *string, l
 
 	o.PageInfo = &pi
 	o.TotalCount = count
-	o.Edges = make([]*models.{{.ModelName}}Edge, len(r))
+	o.Edges = make([]*models.{{.SingularModelName}}Edge, len(r))
 
 	for i, t := range r {
 		node := t
-		var edge models.{{.ModelName}}Edge
+		var edge models.{{.SingularModelName}}Edge
 		{{if eq .PrimaryKeyType "string"}}
-		edge = models.{{.ModelName}}Edge{Cursor: node.{{.PrimaryKey}}, Node: &node}
+		edge = models.{{.SingularModelName}}Edge{Cursor: node.{{.PrimaryKey}}, Node: &node}
 		{{else if eq .PrimaryKeyType "int"}}
-		edge = models.{{.ModelName}}Edge{Cursor: fmt.Sprintf("%d", node.{{.PrimaryKey}}), Node: &node}
+		edge = models.{{.SingularModelName}}Edge{Cursor: fmt.Sprintf("%d", node.{{.PrimaryKey}}), Node: &node}
 		{{else if eq .PrimaryKeyType "uuid.UUID"}}
-		edge = models.{{.ModelName}}Edge{Cursor: node.{{.PrimaryKey}}.String(), Node: &node}
+		edge = models.{{.SingularModelName}}Edge{Cursor: node.{{.PrimaryKey}}.String(), Node: &node}
 		{{else}}
 		panic("Primary key type {{.PrimaryKeyType}} not supported yet")
 		{{end}}
