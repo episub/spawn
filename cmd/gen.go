@@ -21,6 +21,7 @@ import (
 var loaderTemplate *template.Template
 var resolverTemplate *template.Template
 var postgresTemplate *template.Template
+var postgresFileTemplate *template.Template
 var filterTemplate *template.Template
 
 var genCmd = cli.Command{
@@ -57,6 +58,9 @@ var genCmd = cli.Command{
 		var tasks []Task
 		tasks = append(tasks, Task{Folder: "loader", Build: loaderBuild})
 		tasks = append(tasks, Task{Folder: "loader", Build: postgresBuild})
+		if config.Generate.FileManagement.Build {
+			tasks = append(tasks, Task{Folder: "loader", Build: postgresFileBuild})
+		}
 		tasks = append(tasks, Task{Folder: "models", Build: modelsBuild})
 		tasks = append(tasks, Task{Folder: "resolvers", Build: resolverBuild})
 		generateFiles(ctx, config, tasks)
@@ -286,6 +290,33 @@ func loaderBuild(config Config, folder string) error {
 	}
 
 	err = loaderTemplate.Execute(f, struct {
+		Timestamp time.Time
+		Config    Config
+	}{
+		Timestamp: time.Now(),
+		Config:    config,
+	})
+	f.Close()
+
+	if err != nil {
+		return err
+	}
+
+	return goImports(fileName)
+}
+
+// postgresFileBuild Builds our file management solution code
+func postgresFileBuild(config Config, folder string) error {
+	fileName := "gen__file_management.go"
+	if len(folder) > 0 {
+		fileName = folder + "/" + fileName
+	}
+	f, err := os.Create(fileName)
+	if err != nil {
+		return err
+	}
+
+	err = postgresFileTemplate.Execute(f, struct {
 		Timestamp time.Time
 		Config    Config
 	}{

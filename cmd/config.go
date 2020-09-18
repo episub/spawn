@@ -16,10 +16,17 @@ type Config struct {
 type Generate struct {
 	// ProtectGnorm When true, prevents gnorm's default files from being
 	// overwritten
-	ProtectGnorm bool               `yaml:"protectGnorm"`
-	SchemaName   string             `yaml:"schemaName"`
-	Resolvers    []ResolverGenerate `yaml:"resolvers"`
-	Postgres     []PostgresGenerate `yaml:"postgres"`
+	ProtectGnorm   bool                   `yaml:"protectGnorm"`
+	SchemaName     string                 `yaml:"schemaName"`
+	FileManagement FileManagementGenerate `yaml:"fileManagement"` // Generates our standard file management implementation
+	Resolvers      []ResolverGenerate     `yaml:"resolvers"`
+	Postgres       []PostgresGenerate     `yaml:"postgres"`
+}
+
+// FileManagementGenerate Options for building the file management code
+type FileManagementGenerate struct {
+	Build      bool   `yaml:"build"`
+	SchemaName string `yaml:"schemaName"`
 }
 
 // ResolverGenerate Which resolver related things to generate code for

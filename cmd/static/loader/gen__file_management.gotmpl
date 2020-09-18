@@ -1,0 +1,437 @@
+package loader
+
+{{- $fm := .Config.Generate.FileManagement}}
+
+import (
+	"bytes"
+	"context"
+	"crypto/md5"
+	"database/sql"
+	"fmt"
+	"image"
+	"io"
+	"io/ioutil"
+	"log"
+	"os"
+	"strings"
+
+	"{{.Config.PackageName}}/models"
+	"{{.Config.PackageName}}/models"
+	"{{.Config.PackageName}}/gnorm/{{$fm.SchemaName}}/file"
+	"{{.Config.PackageName}}/gnorm/{{$fm.SchemaName}}/filedata"
+	"github.com/disintegration/imaging"
+	"github.com/h2non/filetype"
+	svg "github.com/h2non/go-is-svg"
+	opentracing "github.com/opentracing/opentracing-go"
+	"gocloud.dev/blob"
+	_ "gocloud.dev/blob/gcsblob" // Driver for GCP storage
+
+	"image/gif"  // Read gif files
+	"image/jpeg" // Read jpeg files
+	"image/png"  // Read png files
+)
+
+// FileSizeLimit Limit of file sizes before we try to reduce ourselves
+const FileSizeLimit = 2097152
+
+// SupportedImage Image types we support
+type SupportedImage string
+
+const (
+	// ImagePNG PNG
+	ImagePNG SupportedImage = "png"
+	// ImageJPEG JPEG
+	ImageJPEG SupportedImage = "jpg"
+	// ImageGIF GIF
+	ImageGIF SupportedImage = "gif"
+)
+
+// GetFileData Fetches the data for associated file
+func (l *Loader) GetFileData(ctx context.Context, fileID uuid.UUID) (io.ReadCloser, error) {
+	span, ctx := opentracing.StartSpanFromContext(ctx, "GetFileData")
+	defer span.Finish()
+
+	// Check our storage, as the method to fetch data will depend on that:
+	file, err := file.Find(ctx, l.pool, fileID)
+	if err != nil {
+		return nil, sanitiseError(err)
+	}
+
+	var data []byte
+	switch file.Storage {
+	case "gcp":
+		print("Fetching via gcp")
+		bucket, key, err := bucketKeyFromLocation(ctx, file.Location)
+		if err != nil {
+			return nil, sanitiseError(err)
+		}
+		data, err := fileDataFromGCP(ctx, bucket, key)
+		return data, sanitiseError(err)
+	default:
+		print("Fetching via database")
+		err := l.pool.QueryRow("SELECT data FROM {{$fm.SchemaName}}.file_data INNER JOIN {{$fm.SchemaName}}.file ON file.file_data_id_file_data = file_data.file_data_id WHERE file.file_id=$1", fileID).Scan(&data)
+		buf := bytes.NewReader(data)
+		return ioutil.NopCloser(buf), sanitiseError(err)
+	}
+}
+
+// MigrateFile Migrates a file from its current storage to a new storage type
+func (l *Loader) MigrateFile(ctx context.Context, fileID string, migrateTo vars.Storage) error {
+	file, err := pm.GetFileByID(ctx, l.pool, fileID)
+
+	if err != nil {
+		return sanitiseError(err)
+	}
+
+	// Nothing to do
+	if vars.Storage(file.Storage) == migrateTo {
+		return nil
+	}
+
+	// Grab the file data reader so we can move it
+	dataReader, err := l.GetFileData(ctx, fileID)
+
+	if err != nil {
+		return sanitiseError(err)
+	}
+	defer dataReader.Close()
+
+	switch migrateTo {
+	case vars.StorageGCP:
+		err := l.migrateToGCP(ctx, dataReader, file)
+		return sanitiseError(err)
+	case vars.StorageDatabase:
+		err := l.migrateToDatabase(ctx, dataReader, file)
+		return sanitiseError(err)
+	default:
+		return fmt.Errorf("Have not implemented migration to %s", migrateTo)
+	}
+}
+
+// ConditionalCreateFileData Helper function to create file data, or return an existing record if hash matches already
+func conditionalCreateFileData(ctx context.Context, db gnorm.DB, data []byte) (string, string, error) {
+	var fdid string
+	hash := md5.Sum(data)
+	strHash := fmt.Sprintf("%x", hash)
+
+	db.QueryRow("SELECT file_data_id FROM {{$fm.SchemaName}}.file_data WHERE hash=$1 LIMIT 1", strHash).Scan(&fdid)
+
+	if len(fdid) == 0 {
+		fileData := FileData{
+			Data: data,
+			Hash: strHash,
+		}
+		fileData, err := filedata.Upsert(ctx, db, fileData)
+
+		return fileData.FileDataID, strHash, err
+	}
+
+	return fdid, strHash, nil
+}
+
+func (l *Loader) migrateToGCP(ctx context.Context, dataReader io.ReadCloser, file file.Row) error {
+	// Can't use vars.Cfg because this might be called from another project
+	// that doesn't use it
+	var prefix string
+	if len(file.FileID) >= 3 {
+		prefix = file.FileID[:3]
+	}
+	fileName := prefix + "/" + file.FileID
+	bucketName := os.Getenv(vars.EnvGCPBucketName)
+	if len(bucketName) == 0 {
+		return fmt.Errorf("%s environment variable cannot be empty", vars.EnvGCPBucketName)
+	}
+
+	err := fileDataToGCP(bucketName, fileName, dataReader)
+	if err != nil {
+		return sanitiseError(err)
+	}
+
+	if err != nil {
+		return sanitiseError(err)
+	}
+
+	// Confirm that the data was saved correctly, just because we're paranoid:
+	gcpReader, err := fileDataFromGCP(ctx, bucketName, fileName)
+
+	if err != nil {
+		return sanitiseError(err)
+	}
+	defer gcpReader.Close()
+	b := new(bytes.Buffer)
+	b.ReadFrom(gcpReader)
+	readHash := fmt.Sprintf("%x", md5.Sum(b.Bytes()))
+	if readHash != file.Hash {
+		return sanitiseError(fmt.Errorf("Hash from gcp (%s) did not match expected (%s)", readHash, file.Hash))
+	}
+	log.Printf("Bytes match")
+
+	// Now update database:
+	tx, err := l.pool.Begin()
+	if err != nil {
+		return rollbackErr(err, tx)
+	}
+
+	location := fileName + "@" + bucketName
+	_, err = tx.Exec(`
+UPDATE {{$fm.SchemaName}}.file
+SET
+	storage=$1,
+	migrate_to=$1,
+	file_data_id_file_data=NULL,
+	updated=Now(),
+	updated_by=(SELECT user_id FROM pm.user WHERE username='system'),
+	location=$2
+WHERE file_id=$3
+`, vars.StorageGCP, location, file.FileID)
+
+	if err != nil {
+		return rollbackErr(err, tx)
+	}
+
+	err = l.deleteFromStorage(ctx, tx, vars.Storage(file.Storage), file)
+	if err != nil {
+		return rollbackErr(err, tx)
+	}
+
+	return sanitiseError(tx.Commit())
+}
+
+func (l *Loader) migrateToDatabase(ctx context.Context, dataReader io.ReadCloser, file file.Row) error {
+	defer dataReader.Close()
+
+	// Grab the bytes for file:
+	b := new(bytes.Buffer)
+	b.ReadFrom(dataReader)
+	data := b.Bytes()
+
+	// Add the file to database
+	tx, err := l.pool.Begin()
+	if err != nil {
+		return rollbackErr(err, tx)
+	}
+
+	fdid, hash, err := pm.ConditionalCreateFileData(ctx, tx, data)
+	if err != nil {
+		return rollbackErr(err, tx)
+	}
+
+	_, err = tx.Exec(`
+UPDATE pm.file
+SET
+	storage=$1,
+	migrate_to=$1,
+	file_data_id_file_data=$2,
+	hash=$3,
+	updated=Now(),
+	updated_by=(SELECT user_id FROM pm.user WHERE username='system'),
+	location=''
+WHERE file_id=$4
+`, vars.StorageDatabase, fdid, hash, file.FileID)
+
+	if err != nil {
+		return rollbackErr(err, tx)
+	}
+
+	err = tx.Commit()
+
+	if err != nil {
+		return rollbackErr(err, tx)
+	}
+
+	return sanitiseError(l.deleteFromStorage(ctx, tx, vars.Storage(file.Storage), file))
+}
+
+// deleteFromStorage Removes the file from the specified storage.  WARNING:
+// this will permanently remove.  Should ideally only be used as part of
+// migrate
+func (l *Loader) deleteFromStorage(ctx context.Context, db gnorm.DB, storage vars.Storage, file file.Row) error {
+	switch storage {
+	case vars.StorageDatabase:
+		log.Printf("Deleting (if required) from storage database %s", file.FileDataIDFileData.String)
+		_, err := db.Exec("DELETE FROM pm.file_data WHERE file_data_id=$1 AND file_data_id NOT IN (SELECT file_data_id_file_data FROM pm.file WHERE file_data_id_file_data IS NOT NULL)", file.FileDataIDFileData.String)
+		return err
+	case vars.StorageGCP:
+		bucket, key, err := bucketKeyFromLocation(ctx, file.Location)
+		if err != nil {
+			return sanitiseError(err)
+		}
+		return sanitiseError(deleteFromGCP(ctx, bucket, key))
+	default:
+		return fmt.Errorf("Don't know how to delete from storage %s", storage)
+	}
+}
+
+func fileDataToGCP(bucketName string, key string, data io.ReadCloser) error {
+	ctx := context.Background()
+	bucket, err := blob.OpenBucket(ctx, "gs://"+bucketName)
+	if err != nil {
+		return err
+	}
+	defer bucket.Close()
+
+	w, err := bucket.NewWriter(ctx, key, nil)
+
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(w, data)
+	closeErr := w.Close()
+
+	if err != nil {
+		return err
+	}
+
+	if closeErr != nil {
+		return closeErr
+	}
+
+	return nil
+}
+
+func fileDataFromGCP(ctx context.Context, bucketName string, key string) (io.ReadCloser, error) {
+	bucket, err := blob.OpenBucket(ctx, "gs://"+bucketName)
+	if err != nil {
+		return nil, err
+	}
+	defer bucket.Close()
+
+	return bucket.NewReader(ctx, key, nil)
+}
+
+func deleteFromGCP(ctx context.Context, bucketName string, key string) error {
+	bucket, err := blob.OpenBucket(ctx, "gs://"+bucketName)
+	if err != nil {
+		return err
+	}
+	defer bucket.Close()
+
+	return bucket.Delete(ctx, key)
+}
+
+// bucketKeyFromLocation Returns bucket name, key, and error from a storage
+// string
+func bucketKeyFromLocation(ctx context.Context, location string) (string, string, error) {
+	r := strings.Split(location, "@")
+
+	if len(r) != 2 {
+		return "", "", fmt.Errorf("Expected length 2, but had %d", len(r))
+	}
+
+	return r[1], r[0], nil
+}
+
+func resizeImage(data []byte, extension SupportedImage) ([]byte, error) {
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return []byte{}, nil
+	}
+
+	// Resize to 1024x1024 bounding box:
+	outImg := imaging.Fit(img, 1280, 1280, imaging.Box)
+
+	buf := new(bytes.Buffer)
+	switch extension {
+	case ImageGIF:
+		err = gif.Encode(buf, outImg, nil)
+	case ImageJPEG:
+		err = jpeg.Encode(buf, outImg, nil)
+	case ImagePNG:
+		err = png.Encode(buf, outImg)
+	}
+
+	return buf.Bytes(), err
+}
+
+// updateFileFieldDefault Provides a default update file field function that can
+// be used when you don't want to provide your own
+func (l *Loader) updateFileFieldDefault(ctx context.Context, create bool, db gnorm.DB, o *file.Row, field string, v interface{}) (err error) {
+	switch field {
+	case "id":
+		o.FileID, err = mustString(v, true)
+	case "name":
+		var name string
+		name, err = mustString(v, true)
+		if err != nil {
+			return
+		}
+
+		if len(name) == 0 {
+			addFieldGQLError(ctx, "File name cannot be empty", field)
+			return
+		}
+
+		// We don't want anything after first period:
+		parts := strings.Split(name, ".")
+		o.Name = parts[0]
+
+		if len(o.FileExtension) == 0 && len(parts) > 1 {
+			o.FileExtension = parts[1]
+		}
+	case "data":
+		// Convert from base64 to bytes:
+		var b string
+		b, err = mustString(v, true)
+		if err != nil {
+			return
+		}
+
+		if len(b) == 0 {
+			addFieldGQLError(ctx, "Data cannot be empty", field)
+			return
+		}
+
+		data := []byte(b)
+
+		log.Printf("Data size: %d", len(data))
+		// Record file type:
+		kind, _ := filetype.Match(data)
+		if kind == filetype.Unknown {
+			// Check if SVG:
+			if svg.Is(data) {
+				o.FileType = "image/svg+xml"
+				o.FileExtension = "svg"
+			}
+		} else {
+			o.FileType = kind.MIME.Value
+			o.FileExtension = kind.Extension
+
+			// If file is too large, we try and resize it if it's a supported image
+			// type
+			if len(data) > FileSizeLimit {
+				switch o.FileExtension {
+				case "jpg", "png", "gif":
+					data, err = resizeImage(data, SupportedImage(o.FileExtension))
+					if err != nil {
+						return
+					}
+				}
+			}
+		}
+
+		fdid, hash, err := pm.ConditionalCreateFileData(ctx, db, data)
+		if err != nil {
+			return err
+		}
+
+		o.Hash = hash
+		o.FileDataIDFileData = sql.NullString{String: fdid, Valid: true}
+	case "description":
+		o.Description, err = mustString(v, true)
+	case "expiry":
+		o.Expiry, err = mustNullTime(v)
+	case "fileTypeID":
+		o.FileTypeIDFileType, err = mustString(v, true)
+	case "storage":
+		o.Storage, err = mustString(v, true)
+		if err != nil {
+			return err
+		}
+		o.MigrateTo = o.Storage
+	default:
+		err = fmt.Errorf("Updating '%s' is not enabled, please contact support", field)
+	}
+
+	return
+}

@@ -47,6 +47,7 @@ func loadTemplates() {
 	loaderTemplate = loadTemplateFromFile("loader/generated.gotmpl")
 	filterTemplate = loadTemplateFromFile("models/filter.gotmpl")
 	postgresTemplate = loadTemplateFromFile("loader/gen.gotmpl")
+	postgresFileTemplate = loadTemplateFromFile("loader/gen__file_management.gotmpl")
 	resolverTemplate = loadTemplateFromFile("resolvers/gen.gotmpl")
 }
 
