@@ -129,7 +129,7 @@ func conditionalCreateFileData(ctx context.Context, db gnorm.DB, data []byte) (u
 
 	db.QueryRow("SELECT file_data_id FROM {{$fm.SchemaName}}.file_data WHERE hash=$1 LIMIT 1", strHash).Scan(&fdid)
 
-	if len(fdid.String()) == 0 {
+	if fdid == uuid.Nil {
 		fileData := filedata.Row{
 			Data: data,
 			Hash: strHash,
