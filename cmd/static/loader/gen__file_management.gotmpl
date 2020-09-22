@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"image"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 
@@ -59,32 +58,72 @@ const (
 	ImageGIF SupportedImage = "gif"
 )
 
+// FileReadSeeker Implements the spawn static.File interface for the purposes of
+// delivering files
+type FileReadSeeker struct {
+	file.Row
+	io.ReadSeeker
+}
+
+// Name Used for file download
+func (f *FileReadSeeker) Name() (string, error) {
+	name := f.Row.Name
+	if len(name) == 0 {
+		name = f.FileID.String()
+	}
+	if len(f.FileExtension) > 0 {
+		name = name + "." + f.FileExtension
+	}
+
+	return name, nil
+}
+
+// ETag Used to describe if file has changed
+func (f *FileReadSeeker) ETag() (string, error) {
+	etagRaw := f.Hash
+	etag := base64.StdEncoding.EncodeToString([]byte(etagRaw))
+
+	return etag, nil
+}
+
+// GetFileReadSeeker Returns a file readseeker suitable for using with Spawn's
+// deliver file function
+func (l *PostgresLoader) GetFileReadSeeker(
+	ctx context.Context,
+	fileID uuid.UUID,
+) (*FileReadSeeker, error) {
+	f, rs, err := l.GetFileData(ctx, fileID)
+
+	frs := FileReadSeeker{Row: f, ReadSeeker: rs}
+	return &frs, err
+}
+
 // GetFileData Fetches the data for associated file
-func (l *PostgresLoader) GetFileData(ctx context.Context, fileID uuid.UUID) (io.ReadCloser, error) {
+func (l *PostgresLoader) GetFileData(ctx context.Context, fileID uuid.UUID) (file.Row, io.ReadSeeker, error) {
 	span, ctx := opentracing.StartSpanFromContext(ctx, "GetFileData")
 	defer span.Finish()
 
 	// Check our storage, as the method to fetch data will depend on that:
-	file, err := file.Find(ctx, l.pool, fileID)
+	f, err := file.Find(ctx, l.pool, fileID)
 	if err != nil {
-		return nil, sanitiseError(err)
+		return f, nil, sanitiseError(err)
 	}
 
 	var data []byte
-	switch file.Storage {
+	switch f.Storage {
 	case "gcp":
 		print("Fetching via gcp")
-		bucket, key, err := bucketKeyFromLocation(ctx, file.Location)
+		bucket, key, err := bucketKeyFromLocation(ctx, f.Location)
 		if err != nil {
-			return nil, sanitiseError(err)
+			return f, nil, sanitiseError(err)
 		}
 		data, err := fileDataFromGCP(ctx, bucket, key)
-		return data, sanitiseError(err)
+		return f, data, sanitiseError(err)
 	default:
 		print("Fetching via database")
 		err := l.pool.QueryRow("SELECT data FROM {{$fm.SchemaName}}.file_data INNER JOIN {{$fm.SchemaName}}.file ON file.file_data_id_file_data = file_data.file_data_id WHERE file.file_id=$1", fileID).Scan(&data)
-		buf := bytes.NewReader(data)
-		return ioutil.NopCloser(buf), sanitiseError(err)
+		s := bytes.NewReader(data)
+		return f, s, sanitiseError(err)
 	}
 }
 
@@ -102,12 +141,11 @@ func (l *PostgresLoader) MigrateFile(ctx context.Context, fileID uuid.UUID, migr
 	}
 
 	// Grab the file data reader so we can move it
-	dataReader, err := l.GetFileData(ctx, fileID)
+	_, dataReader, err := l.GetFileData(ctx, fileID)
 
 	if err != nil {
 		return sanitiseError(err)
 	}
-	defer dataReader.Close()
 
 	switch migrateTo {
 	case StorageGCP:
@@ -142,7 +180,7 @@ func conditionalCreateFileData(ctx context.Context, db gnorm.DB, data []byte) (u
 	return fdid, strHash, nil
 }
 
-func (l *PostgresLoader) migrateToGCP(ctx context.Context, dataReader io.ReadCloser, file file.Row) error {
+func (l *PostgresLoader) migrateToGCP(ctx context.Context, dataReader io.ReadSeeker, file file.Row) error {
 	var prefix string
 	if len(file.FileID.String()) >= 3 {
 		prefix = file.FileID.String()[:3]
@@ -175,7 +213,6 @@ func (l *PostgresLoader) migrateToGCP(ctx context.Context, dataReader io.ReadClo
 	if err != nil {
 		return sanitiseError(err)
 	}
-	defer gcpReader.Close()
 	b := new(bytes.Buffer)
 	b.ReadFrom(gcpReader)
 	readHash := fmt.Sprintf("%x", md5.Sum(b.Bytes()))
@@ -215,9 +252,7 @@ WHERE file_id=$3
 	return sanitiseError(tx.Commit())
 }
 
-func (l *PostgresLoader) migrateToDatabase(ctx context.Context, dataReader io.ReadCloser, file file.Row) error {
-	defer dataReader.Close()
-
+func (l *PostgresLoader) migrateToDatabase(ctx context.Context, dataReader io.ReadSeeker, file file.Row) error {
 	// Get migrating username from context:
 	createdBy, ok := ctx.Value("created_by").(string)
 	if !ok {
@@ -286,7 +321,7 @@ func (l *PostgresLoader) deleteFromStorage(ctx context.Context, db gnorm.DB, sto
 	}
 }
 
-func fileDataToGCP(bucketName string, key string, data io.ReadCloser) error {
+func fileDataToGCP(bucketName string, key string, data io.ReadSeeker) error {
 	ctx := context.Background()
 	bucket, err := blob.OpenBucket(ctx, "gs://"+bucketName)
 	if err != nil {
@@ -314,14 +349,24 @@ func fileDataToGCP(bucketName string, key string, data io.ReadCloser) error {
 	return nil
 }
 
-func fileDataFromGCP(ctx context.Context, bucketName string, key string) (io.ReadCloser, error) {
+func fileDataFromGCP(ctx context.Context, bucketName string, key string) (io.ReadSeeker, error) {
 	bucket, err := blob.OpenBucket(ctx, "gs://"+bucketName)
 	if err != nil {
 		return nil, err
 	}
 	defer bucket.Close()
 
-	return bucket.NewReader(ctx, key, nil)
+	r, err := bucket.NewReader(ctx, key, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	defer r.Close()
+	b := new(bytes.Buffer)
+	b.ReadFrom(r)
+
+	s := bytes.NewReader(b.Bytes())
+	return s, nil
 }
 
 func deleteFromGCP(ctx context.Context, bucketName string, key string) error {
