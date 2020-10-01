@@ -327,6 +327,20 @@ func MustNullString(v interface{}, trim bool) (o sql.NullString, err error) {
 	return
 }
 
+func MustNullUUID(v interface{}) (o uuid.NullUUID, err error) {
+	if v == nil {
+		return
+	}
+
+	o.UUID, err = MustUUID(v)
+	if err != nil {
+		return o, err
+	}
+
+	o.Valid = true
+	return
+}
+
 func MustValidateDate(ctx context.Context, path string, v interface{}) (pqt.Date, error) {
 	d, err := MustDate(v)
 	if err != nil {
