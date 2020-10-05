@@ -21,6 +21,7 @@ import (
 var loaderTemplate *template.Template
 var resolverTemplate *template.Template
 var postgresTemplate *template.Template
+var postgresFileTemplate *template.Template
 var filterTemplate *template.Template
 
 var genCmd = cli.Command{
@@ -55,10 +56,10 @@ var genCmd = cli.Command{
 		generateGnorm(config)
 
 		var tasks []Task
-		tasks = append(tasks, Task{Folder: "loader", Build: loaderBuild})
-		tasks = append(tasks, Task{Folder: "loader", Build: postgresBuild})
-		tasks = append(tasks, Task{Folder: "models", Build: modelsBuild})
-		tasks = append(tasks, Task{Folder: "resolvers", Build: resolverBuild})
+		tasks = append(tasks, Task{Name: "Loader", Folder: "loader", Build: loaderBuild})
+		tasks = append(tasks, Task{Name: "Postgres", Folder: "loader", Build: postgresBuild})
+		tasks = append(tasks, Task{Name: "Models", Folder: "models", Build: modelsBuild})
+		tasks = append(tasks, Task{Name: "Resolvers", Folder: "resolvers", Build: resolverBuild})
 		generateFiles(ctx, config, tasks)
 
 		// Recreate GraphQL Code
@@ -197,6 +198,7 @@ func concat(vals ...string) string {
 
 // Task We go through a few folders, deleting generated files and running the template
 type Task struct {
+	Name   string
 	Folder string
 	Build  func(config Config, folder string) error
 }
@@ -205,6 +207,7 @@ func generateFiles(ctx *cli.Context, config Config, tasks []Task) {
 	// Set up the tasks:
 
 	for _, t := range tasks {
+		log.Printf("Generating files for task '%s'", t.Name)
 		path := filePath(ctx, t.Folder)
 		// Delete ALL previously generated files
 		cmd := exec.Command("/bin/sh", "-c", fmt.Sprintf("rm %s/gen_*.go", path))
@@ -286,6 +289,33 @@ func loaderBuild(config Config, folder string) error {
 	}
 
 	err = loaderTemplate.Execute(f, struct {
+		Timestamp time.Time
+		Config    Config
+	}{
+		Timestamp: time.Now(),
+		Config:    config,
+	})
+	f.Close()
+
+	if err != nil {
+		return err
+	}
+
+	return goImports(fileName)
+}
+
+// postgresFileBuild Builds our file management solution code
+func postgresFileBuild(config Config, folder string) error {
+	fileName := "gen__file_management.go"
+	if len(folder) > 0 {
+		fileName = folder + "/" + fileName
+	}
+	f, err := os.Create(fileName)
+	if err != nil {
+		return err
+	}
+
+	err = postgresFileTemplate.Execute(f, struct {
 		Timestamp time.Time
 		Config    Config
 	}{
@@ -386,6 +416,36 @@ func postgresBuild(config Config, folder string) error {
 	err = goImports(fileName)
 	if err != nil {
 		return err
+	}
+
+	// If file management is enabled
+	if config.Generate.FileManagement.Build {
+		fileName := "gen__file_management.go"
+		if len(folder) > 0 {
+			fileName = folder + "/" + fileName
+		}
+		f, err := os.Create(fileName)
+		if err != nil {
+			return err
+		}
+
+		err = postgresFileTemplate.Execute(f, struct {
+			Timestamp time.Time
+			Config    Config
+		}{
+			Timestamp: time.Now(),
+			Config:    config,
+		})
+		f.Close()
+
+		if err != nil {
+			return err
+		}
+
+		err = goImports(fileName)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

@@ -38,7 +38,7 @@ type EmailSendgridAction struct {
 }
 
 // NewEmailSendgridAction Returns an email action for esync
-func NewEmailSendgridAction(sendgridAPI string, taskName string, bccEmail *string) EmailSendgridAction {
+func NewEmailSendgridAction(sendgridAPI string, bccEmail *string) EmailSendgridAction {
 	return EmailSendgridAction{SendgridAPI: sendgridAPI, BccEmail: bccEmail}
 }
 
