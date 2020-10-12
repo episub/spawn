@@ -65,12 +65,18 @@ import (
 // TableName is the primary table that this particular gnormed file deals with.
 const TableName = "{{.Table.DBName}}"
 
+// TableAndSchemaName is the primary table along with its schema prepended
+const TableAndSchemaName = "{{$schema}}.{{ $table }}"
+
+// FieldsString A convenient collection of all the fields used by scanner
+const FieldsString = "{{ join .Table.Columns.DBNames.Sorted ", " }}"
+
 // Row represents a row from '{{ $table }}'.
 type Row struct {
 {{- range .Table.PrimaryKeys.DBNames.Sorted }}{{ with (index $colsByName .)}}
 	{{ .Name }} {{ if .IsArray }}[]{{ end }}{{ .Type }} `json:"{{.DBName}}"` // {{ .DBName }} (PK){{end}}
 {{- end }}
-{{- range $nonPKDBNames }}{{ with (index $colsByName .) }}"
+{{- range $nonPKDBNames }}{{ with (index $colsByName .) }}
 	{{ .Name }} {{ if .IsArray }}[]{{ end }}{{ .Type }} `json:"{{.DBName}}"` // {{ .DBName }}{{end}}
 {{- end }}
 }
@@ -100,13 +106,20 @@ var fieldsList = []string{
 }
 
 // Scanner Scans the provided row into a Row struct and returns it
-func Scanner(row gnorm.Scanner) (Row, error) {
+func Scanner(row gnorm.Scanner, add ...interface{}) (Row, error) {
 	var r Row
-	err := row.Scan(
+
+	fields := []interface{}{
 	{{range .Table.Columns.DBNames.Sorted}}{{with index $colsByName .}}
 		{{- if .IsArray }}pq.Array(&r.{{ .Name }}),{{- else -}}&r.{{ .Name }},{{ end }}{{end}}
 	{{end -}}
-	)
+	}
+
+	for _, v := range add {
+		fields = append(fields, v)
+	}
+
+	err := row.Scan(fields...)
 
 	return r, err
 }

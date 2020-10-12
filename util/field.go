@@ -83,7 +83,17 @@ func GetNullDate(val *string) (n pqt.NullDate, err error) {
 	return
 }
 
-func GetPointerDate(val pqt.NullDate) *string {
+func GetPointerDate(val pqt.NullDate) *civil.Date {
+	if !val.Valid {
+		return nil
+	}
+
+	a := val.Date
+
+	return &a
+}
+
+func GetPointerDateString(val pqt.NullDate) *string {
 	if !val.Valid {
 		return nil
 	}
