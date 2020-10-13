@@ -224,6 +224,11 @@ func MustString(v interface{}, trim bool) (o string, err error) {
 }
 
 func MustUUID(v interface{}) (o uuid.UUID, err error) {
+	if v == nil {
+		err = fmt.Errorf("Cannot be nil")
+		return
+	}
+
 	switch reflect.TypeOf(v).String() {
 	case "string":
 		var s string
