@@ -92,15 +92,13 @@ func query{{.PluralModelName}}(ctx context.Context, first *int, after *string, l
 	}
 
 	// Configure the where clauses:
-	if cf != nil {
-		var fw []sq.Sqlizer
-		fw, err = filter{{.SingularModelName}}(ctx, *cf)
-		if err != nil {
-			return
-		}
-
-		where = append(where, fw...)
+	var fw []sq.Sqlizer
+	fw, err = filter{{.SingularModelName}}(ctx, cf)
+	if err != nil {
+		return
 	}
+
+	where = append(where, fw...)
 
 	f.Where = where
 
@@ -129,8 +127,10 @@ func query{{.PluralModelName}}(ctx context.Context, first *int, after *string, l
 		o.Edges[i] = &edge
 	}
 
-	o.PageInfo.EndCursor = &o.Edges[len(o.Edges) - 1].Cursor
-	o.PageInfo.StartCursor = &o.Edges[0].Cursor
+	if len(o.Edges) > 0 {
+		o.PageInfo.EndCursor = &o.Edges[len(o.Edges) - 1].Cursor
+		o.PageInfo.StartCursor = &o.Edges[0].Cursor
+	}
 
 	return o, err
 }
