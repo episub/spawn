@@ -13,14 +13,21 @@ import (
 )
 
 // DefaultMW Sets up items needed for most requests
-// - Adds a data object to the context, used for passing data through to OPA requests
-// - Sets validation context
 func DefaultMW(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), vars.SharedData, store.NewDataStore())
-		ctx = validate.SetContext(ctx)
+		ctx := DefaultContext(r.Context())
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// DefaultContext Sets the default context needed for most requests
+// - Adds a data object to the context, used for passing data through to OPA requests
+// - Sets validation context
+func DefaultContext(ctx context.Context) context.Context {
+	ctx = context.WithValue(ctx, vars.SharedData, store.NewDataStore())
+	ctx = validate.SetContext(ctx)
+
+	return ctx
 }
 
 // BodyLimitMW Limits body size to the provided bytes
