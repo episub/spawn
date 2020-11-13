@@ -3,7 +3,7 @@
 
 package loader
 
-{{- $package := toLower .ModelName}}
+{{- $package := toLower .PmName}}
 {{- $struct := printf "%s.Row" $package}}
 {{- $fullStr := ""}}
 {{if .Versioned}}
@@ -65,12 +65,13 @@ func (l *PostgresLoader) Query{{.ModelName}}(
 	rows, err := {{$package}}.Query{{$fullStr}}(ctx, l.pool, where, &order)
 
 	if err != nil {
+		err = sanitiseError(err)
 		return
 	}
 
 	models, err = hydrate{{.ModelName}}Rows(ctx, l.pool, rows)
 
-	return models, err
+	return models, sanitiseError(err)
 }
 
 // Get{{.ModelName}} Returns {{.ModelName}} with given ID
@@ -171,10 +172,10 @@ func (l *PostgresLoader) get{{.ModelName}}(ctx context.Context, id {{.PrimaryKey
 	return
 }
 
-func (l *PostgresLoader) batchedGet{{.ModelName}}(id {{.PrimaryKeyType}}, db gnorm.DB) (o {{$package}}.{{$fullStr}}Row, err error) {
+func (l *PostgresLoader) batchedGet{{.PmName}}(id {{.PrimaryKeyType}}, db gnorm.DB) (o {{$package}}.{{$fullStr}}Row, err error) {
 	{{camel .ModelName}}MX.RLock()
 	if !{{camel .ModelName}}Initialised {
-		err = fmt.Errorf("batchedGet{{.ModelName}} not initialised.  Add 'go loader.run{{.ModelName}}Batcher()' to init")
+		err = fmt.Errorf("batchedGet{{.PmName}} not initialised.  Add 'go loader.run{{.ModelName}}Batcher()' to init")
 	}
 	{{camel .ModelName}}MX.RUnlock()
 	if err != nil {
@@ -277,7 +278,7 @@ func (l *PostgresLoader) update{{.ModelName}}(ctx context.Context, db gnorm.DB, 
 
 	// By iterating over the map entries, we can ensure we only modify those values that are set:
 	for k, v := range u {
-		err = l.update{{.ModelName}}Field(pathCtx, false, db, &o, k, v)
+		err = l.update{{.PmName}}Field(pathCtx, false, db, &o, k, v)
 
 		if err != nil {
 			return fmt.Errorf("%s: %s", k, err)
@@ -325,8 +326,8 @@ func (l *PostgresLoader) Create{{.ModelName}}(ctx context.Context, u map[string]
 	return o, sanitiseError(err)
 }
 
-// create{{.PmName}} Creates {{.PmName}} from given input
-func (l *PostgresLoader) create{{.PmName}}(ctx context.Context, db gnorm.DB, i map[string]interface{}) (o {{$package}}.{{$fullStr}}Row, err error) {
+// create{{.PmName}} Creates {{.ModelName}} from given input
+func (l *PostgresLoader) create{{.ModelName}}(ctx context.Context, db gnorm.DB, i map[string]interface{}) (o {{$package}}.{{$fullStr}}Row, err error) {
 	span, ctx := opentracing.StartSpanFromContext(ctx, "create{{.PmName}}")
 	defer span.Finish()
 
@@ -334,7 +335,7 @@ func (l *PostgresLoader) create{{.PmName}}(ctx context.Context, db gnorm.DB, i m
 	pathCtx := addPathToContext(ctx, kace.Snake("{{.ModelName}}"))
 
 	for k, v := range i {
-		err = l.update{{.ModelName}}Field(pathCtx, true, db, &o, k, v)
+		err = l.update{{.PmName}}Field(pathCtx, true, db, &o, k, v)
 
 		if err != nil {
 			err = fmt.Errorf("%s: %s", k, err)
