@@ -13,6 +13,7 @@ func NewSyncManager(driver Driver) SyncManager {
 	sm.driver = driver
 	sm.registeredActions = make(map[string]TaskAction)
 	sm.actionQueue = make(chan (ScheduledAction))
+	sm.actionStreams = make(map[string]chan (ScheduledAction))
 	sm.taskQueue = make(chan (taskQueueAction))
 	sm.cancel = make(chan (bool))
 	sm.registerMutex = &sync.Mutex{}
@@ -30,6 +31,7 @@ type taskQueueAction struct {
 // SyncManager is the central process for running actions
 type SyncManager struct {
 	actionQueue       chan (ScheduledAction)
+	actionStreams     map[string]chan (ScheduledAction)
 	taskQueue         chan (taskQueueAction)
 	cancel            chan (bool)
 	driver            Driver
@@ -47,10 +49,22 @@ func (s *SyncManager) Run() {
 	for {
 		select {
 		case action := <-s.actionQueue:
-			err := action.Do()
-			if err != nil {
-				s.errorHandler(err)
+			a := action
+			// We check if a stream (chan) exists for this action, and if not we
+			// create and spin it up first.  After that, we send tasks off to run
+
+			// Check for existing stream:
+			var stream chan ScheduledAction
+			var ok bool
+			if stream, ok = s.actionStreams[action.Stream()]; !ok {
+				// No such stream exists, so let's create first
+				stream = make(chan (ScheduledAction))
+				s.actionStreams[action.Stream()] = stream
+				// Run a goroutine that handles actions from this stream:
+				s.runStream(stream)
 			}
+			// Add this task to the queue, but in a goroutine so that we don't block:
+			go func(stream chan ScheduledAction) { stream <- a }(stream)
 		case <-s.cancel:
 			return
 		case tqa := <-s.taskQueue:
@@ -98,6 +112,30 @@ func (s *SyncManager) Run() {
 			tqa.Done <- true
 		}
 	}
+}
+
+// runStream By separating tasks into separate streams, we can have some
+// scheduled actions run side by side, and others that run separately.  For
+// example, Netsuite doesn't like multiple connections, so all such scheduled
+// actions may go into one stream.  On the other hand, actions that run against
+// a Postgres database may be able to run simultaneously.  runStream receives
+// actions on its stream, and blocks on that stream until the action is
+// complete.
+func (s *SyncManager) runStream(stream chan (ScheduledAction)) {
+	n := time.Now()
+	go func() {
+		fmt.Printf("Starting a new stream at %s\n", n)
+		for {
+			select {
+			case action := <-stream:
+				fmt.Printf("Running action for stream that started at %s\n", n)
+				err := action.Do()
+				if err != nil {
+					s.errorHandler(err)
+				}
+			}
+		}
+	}()
 }
 
 func (s *SyncManager) runQueue() {

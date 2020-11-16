@@ -25,6 +25,10 @@ func (m myScheduledAction) Do() error {
 	return nil
 }
 
+func (m myScheduledAction) Stream() string {
+	return "my-scheduled-action"
+}
+
 // Use a queue action to handle tasks in a queue
 type myQueueAction struct{}
 
@@ -92,6 +96,7 @@ You can use this library for either creating a service to run the synchronising 
 * Data: an action can store data in the queue
 * Task Key: this should uniquely identify a particular action.  Think of it as the primary key, though it may not be the actual primary key, depending on driver implementation.  **If there is more than one READY entry for the same task key, only the most recent will be performed**.
 * Task Name: this identifies the type of task.  Action managers may handle particular task types.  For example, you may have a task name such as "CUSTOMER_UPDATE", with multiple database entries of that sort.  Try to keep one action per task name.
+* Stream: some tasks can be run simultaneously, while others may need to block.  Put them in the same stream if they should block each other, and separate streams if safe to run concurrently.
 
 ## Actions
 
@@ -134,6 +139,22 @@ CREATE TABLE public.message_queue(
   do_after timestamptz NOT NULL DEFAULT Now(),
 	CONSTRAINT message_queue_id_pk PRIMARY KEY (message_queue_id)
 );
+
+CREATE TABLE public.cdc_hash(
+	cdc_hash_id uuid NOT NULL DEFAULT gen_random_uuid(),
+	cdc_controller_id uuid NOT NULL,
+	object_id varchar NOT NULL,
+	hash uuid,
+	created_at timestamptz NOT NULL DEFAULT Now(),
+	updated_at timestamptz NOT NULL DEFAULT Now(),
+	CONSTRAINT cdc_hash_pk PRIMARY KEY (cdc_hash_id),
+	CONSTRAINT cdc_hash_controller_object_uq UNIQUE (cdc_controller_id,object_id)
+);
+
+CREATE INDEX idx_cdc_hash_id ON public.cdc_hash (cdc_controller_id, object_id);
+CREATE INDEX idx_cdc_hash_id_hash ON public.cdc_hash (cdc_controller_id, object_id, hash);
+
+)
 ```
 
 # TODO:
