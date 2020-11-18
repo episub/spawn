@@ -128,7 +128,6 @@ func (s *SyncManager) runStream(stream chan (ScheduledAction)) {
 		for {
 			select {
 			case action := <-stream:
-				fmt.Printf("Running action for stream that started at %s\n", n)
 				err := action.Do()
 				if err != nil {
 					s.errorHandler(err)

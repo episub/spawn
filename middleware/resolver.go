@@ -45,6 +45,7 @@ func CheckAllowed(
 	prefix string,
 	objectName string,
 	input map[string]interface{},
+	args map[string]interface{},
 ) (string, interface{}, error) {
 	// Attempt the authz policy first.  If we have an error, then we try allow
 	allowed, reason, data, err := opa.Authorised(ctx, getAuthString(prefix, objectName, "authz"), input)
@@ -67,7 +68,66 @@ func CheckAllowed(
 		return reason, data, permissionDeniedError(fmt.Sprintf("%s.%s%s", prefix, objectName, msg))
 	}
 
+	// Here we strip out any fields from the args that we don't have
+	// permission to modify, so that they can't be modified
+	if args != nil && prefix == "mutation" {
+		policy := fmt.Sprintf("data.api.%s.%s.allowedFields", prefix, objectName)
+		allowedFields, err := opa.AuthorisedStrings(ctx, policy, input)
+
+		if err != nil {
+			return "Could not find allowedFields for " + policy, data, err
+		}
+
+		err = stripForbidden(
+			ctx,
+			"",
+			allowedFields,
+			args,
+		)
+	}
+
 	return reason, data, nil
+}
+
+// stripForbidden Removes fields from the data that aren't in the allowed list.
+// If a field has a period in it (e.g., "supplier.name"), then that needs to
+// be checked in sub-map's.  This runs recursively, searching for keys in
+// the child maps, and so on, building up the prefix as it goes.
+func stripForbidden(ctx context.Context, prefix string, allowed []string, data map[string]interface{}) error {
+OUTER:
+	for k, v := range data {
+		// We want to work out the prefix like supplier, or supplier.address, or
+		// supplier.address.state.  As this runs recursively, p will extend to
+		// become "supplier", "supplier.address", "supplier.address.city"
+		p := k
+		if len(prefix) > 0 {
+			p = prefix + "." + k
+		}
+
+		// Check if the value is actually a child map, and if it is, we call
+		// this function recursively.
+		if nd, ok := v.(map[string]interface{}); ok {
+			err := stripForbidden(ctx, p, allowed, nd)
+			if err != nil {
+				return err
+			}
+		} else {
+			// No nested field, so check if this is in allowed list:
+			for _, s := range allowed {
+				// Comparing to our prefix, p, to see if it's in there
+				if strings.TrimSpace(p) == strings.TrimSpace(s) {
+					log.Printf("Matched: %s and %s", p, s)
+					continue OUTER
+				}
+			}
+
+			// Not found, so not permitted:
+			log.Warningf("Field %s prohibited, so removing from mutation.  May cause panic if field is essential.", k)
+			delete(data, k)
+		}
+	}
+
+	return nil
 }
 
 // mergeMap Merges the values in b into a
@@ -91,7 +151,7 @@ func ResolverMiddleware(
 	defaultPayload := defaultPayloadFunc
 	requestPayload := requestPayloadFunc
 	return func(ctx context.Context, next graphql.Resolver) (interface{}, error) {
-		rctx := graphql.GetResolverContext(ctx)
+		rctx := graphql.GetFieldContext(ctx)
 
 		// Check if access is allowed, for parent queries.  Usually rejecting unauthorised access, except for specific queries that are public:
 		if rctx.Object == "Query" || rctx.Object == "Mutation" {
@@ -128,8 +188,10 @@ func ResolverMiddleware(
 						"data":  data,
 					},
 				})
+
 				return nil, nil
 			}
+
 		}
 
 		// Run the resolvers
@@ -220,7 +282,7 @@ func runAllowCheck(
 		return "", nil, err
 	}
 
-	return CheckAllowed(ctx, strings.ToLower(rctx.Object), rctx.Field.Name, input)
+	return CheckAllowed(ctx, strings.ToLower(rctx.Object), rctx.Field.Name, input, rctx.Args)
 }
 
 // OpentracingResolverMiddleware Taken from an older version of gqlgen

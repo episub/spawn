@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"context"
 	"fmt"
 	"log"
 
@@ -42,9 +43,9 @@ type CDCRunnerAction struct {
 	sourceQuery  string
 	schema       string
 	db           *pgx.ConnPool
-	createFunc   func(CDCObjectAction) error
-	updateFunc   func(CDCObjectAction) error
-	deleteFunc   func(CDCObjectAction) error
+	createFunc   func(context.Context, CDCObjectAction) error
+	updateFunc   func(context.Context, CDCObjectAction) error
+	deleteFunc   func(context.Context, CDCObjectAction) error
 }
 
 // CDCObjectAction Object ID along with the action that should be taken
@@ -72,9 +73,9 @@ func NewCDCRunnerAction(
 	sourceQuery string,
 	schema string,
 	db *pgx.ConnPool,
-	createFunc func(CDCObjectAction) error,
-	updateFunc func(CDCObjectAction) error,
-	deleteFunc func(CDCObjectAction) error,
+	createFunc func(context.Context, CDCObjectAction) error,
+	updateFunc func(context.Context, CDCObjectAction) error,
+	deleteFunc func(context.Context, CDCObjectAction) error,
 ) (CDCRunnerAction, error) {
 	var err error
 
@@ -97,6 +98,7 @@ func NewCDCRunnerAction(
 
 // Do Run a loop of trying to sync objects needing to sync
 func (c CDCRunnerAction) Do() error {
+	ctx := context.Background()
 	fmt.Println("Attempting to get changes")
 	objects, err := c.getChanges(1)
 
@@ -108,7 +110,7 @@ func (c CDCRunnerAction) Do() error {
 	fmt.Println("Objects retrieved for sync:")
 	for _, v := range objects {
 		log.Printf(" * %s (%s): %s", v.ObjectID, v.Hash, v.Action)
-		err = v.do()
+		err = v.do(ctx)
 		if err != nil {
 			log.Printf("Error marking as done: %s", err)
 			return err
@@ -124,16 +126,16 @@ func (c CDCRunnerAction) Stream() string {
 }
 
 // MarkDone Mark this action as completed
-func (c CDCObjectAction) do() error {
+func (c CDCObjectAction) do(ctx context.Context) error {
 	var err error
 
 	switch c.Action {
 	case CDCActionCreate:
-		err = c.cdcAction.createFunc(c)
+		err = c.cdcAction.createFunc(ctx, c)
 	case CDCActionUpdate:
-		err = c.cdcAction.updateFunc(c)
+		err = c.cdcAction.updateFunc(ctx, c)
 	case CDCActionDelete:
-		err = c.cdcAction.deleteFunc(c)
+		err = c.cdcAction.deleteFunc(ctx, c)
 	default:
 		log.Printf("Error: Unknown action type %s", c.Action)
 	}
