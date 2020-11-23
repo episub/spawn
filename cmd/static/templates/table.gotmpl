@@ -251,6 +251,51 @@ func Query{{$element}}(
 {{end}}
 
 {{if .Table.HasPrimaryKey }}
+// QueryFuzzyMatch Returns a list matching the provided fuzzy match
+// string across the provided fields
+func QueryFuzzyMatch(
+	ctx context.Context,
+	db gnorm.DB,
+	match string,
+	only bool,
+	where string,
+	whereArgs []interface{},
+	fields []string,
+	limit int64,
+) (vals []Row, err error) {
+	span, ctx := opentracing.StartSpanFromContext(ctx, "QueryFuzzyMatch {{ .Table.Name }}")
+	defer span.Finish()
+
+	matchFields := strings.Join(fields, " || '|' || ")
+	onlyStr := ""
+	if only {
+		onlyStr = "ONLY"
+	}
+
+	pQry, _, err := PaginatedQuery.ToSql()
+
+	qry := `
+SELECT %s FROM ` + onlyStr + ` %s
+JOIN (
+	SELECT {{$primaryKey.DBName}} AS match_id, similarity FROM (
+		SELECT {{$primaryKey.DBName}}, public.SIMILARITY(` + matchFields + `, $1)
+		FROM (` + pQry + `) abc ` + where + `
+		ORDER BY similarity DESC
+		LIMIT ` + fmt.Sprintf("%d", limit) + `
+	) xyz
+) matches
+ON matches.match_id = {{ $table }}.{{$primaryKey.DBName}}
+ORDER BY similarity DESC
+`
+
+	args := make([]interface{}, len(whereArgs)+1)
+	args[0] = match
+	for i, v := range whereArgs {
+		args[i+1] = v
+	}
+	return CustomQuery(ctx, db, qry, args...)
+}
+
 // PaginatedQuery Query used to get paginated results.  Can be replaced with
 // a custom query of your own choosing that will allow you to sort or filter
 // based on related fields as well
@@ -518,6 +563,7 @@ func UpsertOnConflict(ctx context.Context, onConflict string, db gnorm.DB, o Row
 	return o,nil
 }
 
+// InsertOptions Allows customising how an insert is handled
 type InsertOptions struct {
 	IncludeFields []string // If != 0, then we only batch insert these fields
 }
