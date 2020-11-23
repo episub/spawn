@@ -441,7 +441,7 @@ func CustomQuery(ctx context.Context, db {{$rootPkg}}.DB, query string, args ...
 	span, ctx := opentracing.StartSpanFromContext(ctx, "CustomQuery {{.Table.Name}}")
 	defer span.Finish()
 
-	var fields = `{{ join .Table.Columns.DBNames.Sorted ", " }}`
+	var fields = `{{$table}}.{{ join .Table.Columns.DBNames.Sorted (printf ", %s." $table) }}`
 	var table = `{{$schema}}.{{ $table }}`
 	var sqlstr = fmt.Sprintf(query, fields, table)
 	var vals []Row
