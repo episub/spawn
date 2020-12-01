@@ -125,12 +125,12 @@ var initCmd = cli.Command{
 		createFile(ctx, "schema.graphql", gqlSchemaDefault)
 		createFile(ctx, "gqlgen.yml", gqlConfigDefault)
 		createFile(ctx, "docker-compose.yml", dockerComposeDefault)
-		copyTemplateFolder("migrations", "migrations")
+		copyTemplateFolder(false, "static/migrations", "migrations")
 		createFileFromTemplate("gnorm.toml", "gnorm.toml")
 		createFileFromTemplate("config.yaml", "config.yaml")
 
 		// OPA policy related files
-		copyTemplateFolder("policies", "policies")
+		copyTemplateFolder(false, "static/policies", "policies")
 
 		generateGQL(ctx)
 		createFileFromTemplate("server.go", "server.go")

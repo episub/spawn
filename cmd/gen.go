@@ -78,7 +78,7 @@ func generateGnorm(config Config) {
 	// Delete any existing gnorm files so there are no legacy ones around
 	runCommand("rm -rf gnorm")
 	if !config.Generate.ProtectGnorm {
-		copyTemplateFolder("templates", "templates")
+		copyTemplateFolder(false, "static/templates", "templates")
 	}
 
 	gcli.ParseAndRun(env)
@@ -86,20 +86,28 @@ func generateGnorm(config Config) {
 	runCommand(fmt.Sprintf("goimports -w %s", "gnorm/."))
 
 	//copyTemplate("gnorm/db.go", "gnorm/db.go")
-	copyTemplate("gnorm/where.go", "gnorm/where.go")
+	copyTemplateFolder(false, "static/gnorm", "gnorm")
 
+	if len(config.Generate.LocalGnormStatic) > 0 {
+		copyTemplateFolder(true, config.Generate.LocalGnormStatic, ".")
+	}
 }
 
 // copyTemplate Copies files from the template folder relative to *this* file
 // to the destination
-func copyTemplate(source string, destination string) {
-	log.Printf("Copying from %s to %s", source, destination)
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		panic("No caller information")
+func copyTemplate(local bool, source string, destination string) {
+	var filename string
+	var ok bool
+	log.Printf("Copying from %s to %s (local: %t)", source, destination, local)
+	if !local {
+		_, filename, _, ok = runtime.Caller(0)
+		if !ok {
+			panic("No caller information")
+		}
 	}
 
-	input, err := ioutil.ReadFile(path.Dir(filename) + "/static/" + source)
+	fullPath := path.Dir(filename) + "/" + source
+	input, err := ioutil.ReadFile(fullPath)
 	if err != nil {
 		panic(err)
 	}
@@ -112,28 +120,33 @@ func copyTemplate(source string, destination string) {
 
 // copyTemplateFolder copies each file in the specified folder using
 // copyTemplate
-func copyTemplateFolder(source string, destination string) {
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		panic("No caller information")
+func copyTemplateFolder(local bool, source string, destination string) {
+	var filename string
+	var ok bool
+
+	if !local {
+		_, filename, _, ok = runtime.Caller(0)
+		if !ok {
+			panic("No caller information")
+		}
 	}
 
 	_ = os.Mkdir(destination, 0755)
 
-	files, err := ioutil.ReadDir(path.Dir(filename) + "/static/" + source)
+	files, err := ioutil.ReadDir(path.Dir(filename) + "/" + source)
 
 	if err != nil {
 		panic(err)
 	}
 
 	for _, f := range files {
+		log.Println("Copying " + f.Name())
 		if f.IsDir() {
-			copyTemplateFolder(source+"/"+f.Name(), destination+"/"+f.Name())
+			copyTemplateFolder(local, source+"/"+f.Name(), destination+"/"+f.Name())
 		} else {
-			copyTemplate(source+"/"+f.Name(), destination+"/"+f.Name())
+			copyTemplate(local, source+"/"+f.Name(), destination+"/"+f.Name())
 		}
 	}
-
 }
 
 var authorisationModels = []string{

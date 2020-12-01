@@ -16,11 +16,12 @@ type Config struct {
 type Generate struct {
 	// ProtectGnorm When true, prevents gnorm's default files from being
 	// overwritten
-	ProtectGnorm   bool                   `yaml:"protectGnorm"`
-	SchemaName     string                 `yaml:"schemaName"`
-	FileManagement FileManagementGenerate `yaml:"fileManagement"` // Generates our standard file management implementation
-	Resolvers      []ResolverGenerate     `yaml:"resolvers"`
-	Postgres       []PostgresGenerate     `yaml:"postgres"`
+	ProtectGnorm     bool                   `yaml:"protectGnorm"`
+	LocalGnormStatic string                 `yaml:"localGnormStatic"` // Specifies a local folder of files to be copied into the gnorm generated file structure
+	SchemaName       string                 `yaml:"schemaName"`
+	FileManagement   FileManagementGenerate `yaml:"fileManagement"` // Generates our standard file management implementation
+	Resolvers        []ResolverGenerate     `yaml:"resolvers"`
+	Postgres         []PostgresGenerate     `yaml:"postgres"`
 }
 
 // FileManagementGenerate Options for building the file management code

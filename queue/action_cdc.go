@@ -46,6 +46,7 @@ type CDCRunnerAction struct {
 	createFunc   func(context.Context, CDCObjectAction) error
 	updateFunc   func(context.Context, CDCObjectAction) error
 	deleteFunc   func(context.Context, CDCObjectAction) error
+	limit        int // How many to grab from database at one time
 }
 
 // CDCObjectAction Object ID along with the action that should be taken
@@ -76,6 +77,7 @@ func NewCDCRunnerAction(
 	createFunc func(context.Context, CDCObjectAction) error,
 	updateFunc func(context.Context, CDCObjectAction) error,
 	deleteFunc func(context.Context, CDCObjectAction) error,
+	limit int,
 ) (CDCRunnerAction, error) {
 	var err error
 
@@ -87,6 +89,7 @@ func NewCDCRunnerAction(
 		createFunc:   createFunc,
 		updateFunc:   updateFunc,
 		deleteFunc:   deleteFunc,
+		limit:        limit,
 	}
 
 	if db == nil {
@@ -99,17 +102,17 @@ func NewCDCRunnerAction(
 // Do Run a loop of trying to sync objects needing to sync
 func (c CDCRunnerAction) Do() error {
 	ctx := context.Background()
-	fmt.Println("Attempting to get changes")
-	objects, err := c.getChanges(1)
+	if c.limit == 0 {
+		c.limit = 1
+	}
+	objects, err := c.getChanges(c.limit)
 
 	if err != nil {
 		return err
 	}
 
 	// Log out for now:
-	fmt.Println("Objects retrieved for sync:")
 	for _, v := range objects {
-		log.Printf(" * %s (%s): %s", v.ObjectID, v.Hash, v.Action)
 		err = v.do(ctx)
 		if err != nil {
 			log.Printf("Error marking as done: %s", err)
