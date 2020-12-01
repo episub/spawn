@@ -39,14 +39,14 @@ var genCmd = cli.Command{
 			}
 		}
 
-		// Ensure package name is loaded:
-		err := loadPackageName()
+		// Load config.yaml
+		config, err := readConfig(filePath(ctx, "config.yaml"))
 		if err != nil {
 			exit(err)
 		}
 
-		// Load config.yaml
-		config, err := readConfig(filePath(ctx, "config.yaml"))
+		// Ensure package name is loaded:
+		err = loadPackageName()
 		if err != nil {
 			exit(err)
 		}

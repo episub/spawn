@@ -60,3 +60,5 @@ require (
 	gopkg.in/oleiade/reflections.v1 v1.0.0
 	gopkg.in/yaml.v2 v2.3.0
 )
+
+replace gnorm.org/gnorm => github.com/episub/gnorm v1.0.1-0.20200904063027-df1d70929cd7

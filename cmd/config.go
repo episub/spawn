@@ -69,6 +69,10 @@ func readConfig(filename string) (Config, error) {
 		return config, err
 	}
 
+	if len(packageName) == 0 && len(config.PackageName) > 0 {
+		packageName = config.PackageName
+	}
+
 	return config, err
 }
 
