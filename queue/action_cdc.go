@@ -105,7 +105,7 @@ func (c CDCRunnerAction) Do() error {
 	if c.limit == 0 {
 		c.limit = 1
 	}
-	objects, err := c.getChanges(c.limit)
+	objects, err := c.GetChanges(c.limit)
 
 	if err != nil {
 		return err
@@ -113,7 +113,7 @@ func (c CDCRunnerAction) Do() error {
 
 	// Log out for now:
 	for _, v := range objects {
-		err = v.do(ctx)
+		err = v.MarkDone(ctx)
 		if err != nil {
 			log.Printf("Error marking as done: %s", err)
 			return err
@@ -129,16 +129,22 @@ func (c CDCRunnerAction) Stream() string {
 }
 
 // MarkDone Mark this action as completed
-func (c CDCObjectAction) do(ctx context.Context) error {
+func (c CDCObjectAction) MarkDone(ctx context.Context) error {
 	var err error
 
 	switch c.Action {
 	case CDCActionCreate:
-		err = c.cdcAction.createFunc(ctx, c)
+		if c.cdcAction.createFunc != nil {
+			err = c.cdcAction.createFunc(ctx, c)
+		}
 	case CDCActionUpdate:
-		err = c.cdcAction.updateFunc(ctx, c)
+		if c.cdcAction.updateFunc != nil {
+			err = c.cdcAction.updateFunc(ctx, c)
+		}
 	case CDCActionDelete:
-		err = c.cdcAction.deleteFunc(ctx, c)
+		if c.cdcAction.deleteFunc != nil {
+			err = c.cdcAction.deleteFunc(ctx, c)
+		}
 	default:
 		log.Printf("Error: Unknown action type %s", c.Action)
 	}
@@ -167,8 +173,8 @@ AND hash = $3::uuid`, c.ControllerID, c.ObjectID, c.Hash)
 	return err
 }
 
-// getChanges Returns up to 'n' random rows that need updating/creating/deleting
-func (c CDCRunnerAction) getChanges(
+// GetChanges Returns up to 'n' random rows that need updating/creating/deleting
+func (c CDCRunnerAction) GetChanges(
 	n int,
 ) ([]CDCObjectAction, error) {
 	// Find all the changes
@@ -225,4 +231,21 @@ LIMIT %d
 	}
 
 	return actions, nil
+}
+
+// GetObject Returns a CDCObjectAction for manual marking of done
+func (c CDCRunnerAction) GetObject(
+	objectID uuid.UUID,
+	action CDCAction,
+	hash uuid.UUID,
+) CDCObjectAction {
+	obj := CDCObjectAction{
+		ObjectID:     objectID.String(),
+		Action:       action,
+		Hash:         hash.String(),
+		ControllerID: c.controllerID.String(),
+		cdcAction:    c,
+	}
+
+	return obj
 }
