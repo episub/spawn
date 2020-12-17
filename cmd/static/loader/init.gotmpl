@@ -61,7 +61,7 @@ func sanitiseError(err error) error {
 		return nil
 	}
 	switch {
-	case err == pgx.ErrNoRows || err == sql.ErrNoRows:
+	case err == pgx.ErrNoRows || err == sql.ErrNoRows || strings.Contains(err.Error(), "no rows in result set"):
 		return ErrNoRecords
 	case strings.Contains(err.Error(), "invalid input syntax for type"):
 		log.Errorf("Sanitised error: %s", err)

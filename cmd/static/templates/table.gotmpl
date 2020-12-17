@@ -99,8 +99,14 @@ var (
 {{- end}}
 )
 
-var fieldsList = []string{
+var FieldsList = []string{
 {{- range .Table.Columns.DBNames.Sorted }}{{with index $colsByName .}}
+	{{.Name}}Col,{{end}}
+{{- end}}
+}
+
+var PKFieldsList = []string{
+{{- range .Table.PrimaryKeys.DBNames.Sorted }}{{with index $colsByName .}}
 	{{.Name}}Col,{{end}}
 {{- end}}
 }
@@ -510,16 +516,16 @@ func CustomQuery(ctx context.Context, db {{$rootPkg}}.DB, query string, args ...
 {{if $isView}}
 {{else}}
 // Upsert Creates or updates record based on input
-func Upsert(ctx context.Context, db gnorm.DB, o Row) (Row, error) {
+func Upsert(ctx context.Context, db gnorm.DB, o Row, options InsertOptions) (Row, error) {
 	span, _ := opentracing.StartSpanFromContext(ctx, "Upsert_{{.Table.Name}}")
 	defer span.Finish()
-	
-	return UpsertOnConflict(ctx, "({{ join .Table.PrimaryKeys.DBNames.Sorted ", " }})", db, o)
+
+	return UpsertOnConflict(ctx, "({{ join .Table.PrimaryKeys.DBNames.Sorted ", " }})", db, o, options)
 }
 
 // UpsertOnConflict Creates or updates record based on input, allowing user
 // to provide a custom on conflict
-func UpsertOnConflict(ctx context.Context, onConflict string, db gnorm.DB, o Row) (Row, error) {
+func UpsertOnConflict(ctx context.Context, onConflict string, db gnorm.DB, o Row, options InsertOptions) (Row, error) {
 	span, _ := opentracing.StartSpanFromContext(ctx, "UpsertOnConflict_{{.Table.Name}}")
 	defer span.Finish()
 
@@ -542,20 +548,21 @@ func UpsertOnConflict(ctx context.Context, onConflict string, db gnorm.DB, o Row
 		return o, err
 	}
 
+	argNumbers, rowArgs, err := getFieldsAndArgs(ctx, o, 0, options.GetFields())
+
 	// sql query
 	var sqlstr = `INSERT INTO {{$schema}}.{{$table}} (` +
-		`{{ join .Table.Columns.DBNames.Sorted ", " }}` +
+		strings.Join(options.GetFields(), ", ") +
 		`) VALUES (` +
-		{{- $vals := numbers 1 (len .Table.Columns) }}
-		`${{ join $vals ", $" }}` +
+		`$` + strings.Join(argNumbers, ", $") +
 		`) ON CONFLICT ` + onConflict + ` DO UPDATE SET (` +
-		`{{ join $nonPKDBNames ", " }}` +
-		`) = (` +
-		`EXCLUDED.{{ join $nonPKDBNames ", EXCLUDED." }}` +
+		strings.Join(options.GetNonPKFields(), ", ") +
+		`) = (` + 
+		`EXCLUDED.` + strings.Join(options.GetNonPKFields(), ", EXCLUDED.") + 
 		`)`
 
 	// run query
-	_, err = db.Exec(sqlstr, o.{{join .Table.Columns.Names.Sorted ", o."}})
+	_, err = db.Exec(sqlstr, rowArgs...)
 	if err != nil {
 		return o, err
 	}
@@ -566,6 +573,39 @@ func UpsertOnConflict(ctx context.Context, onConflict string, db gnorm.DB, o Row
 // InsertOptions Allows customising how an insert is handled
 type InsertOptions struct {
 	IncludeFields []string // If != 0, then we only batch insert these fields
+}
+
+func (i *InsertOptions) GetFields() []string {
+	if len(i.IncludeFields) == 0 {
+		return FieldsList
+	}
+
+	// By putting strings alphabetically ordered, we can assume the same order
+	// when adding arguments.  If any fields don't exist, our count at the end
+	// of looping will not match.
+	sort.Strings(i.IncludeFields)
+
+	return i.IncludeFields
+}
+
+func (i *InsertOptions) GetNonPKFields() []string {
+	fields := i.GetFields()
+	var nonFields []string
+
+	// Loop over fields, including only those that are not PK fields:
+	for _, field := range fields {
+		found := false
+		for _, pkField := range PKFieldsList {
+			if field == pkField {
+				found = true
+			}
+		}
+		if !found {
+			nonFields = append(nonFields, field)
+		}
+	}
+
+	return nonFields
 }
 
 // BatchInsert Creates provided entries in one attempt
@@ -579,14 +619,11 @@ func BatchInsert(
 	defer span.Finish()
 
 	var rowCount = {{len .Table.Columns}}
-	if len(options.IncludeFields) > 0 {
-		rowCount = len(options.IncludeFields)
-		// By putting strings alphabetically ordered, we can assume the same order
-		// when adding arguments.  If any fields don't exist, our count at the end
-		// of looping will not match.
-		sort.Strings(options.IncludeFields)
-	}
 
+	if len(options.GetFields()) > 0 {
+		rowCount = len(options.GetFields())
+	}
+	
 	// No rows, so do nothing
 	if len(rows) == 0 {
 		return nil
@@ -601,25 +638,16 @@ func BatchInsert(
 			return err
 		}
 
-		argNumbers := make([]string, rowCount)
-
 		globalIndex := i * rowCount
-		index := 0
 
+		argNumbers, rowArgs, err := getFieldsAndArgs(ctx, o, globalIndex, options.GetFields())
 
-		{{- range .Table.Columns.DBNames.Sorted}}{{with index $colsByName .}}
-		if len(options.IncludeFields) == 0 || "{{.DBName}}" == options.IncludeFields[index] {
-			args[globalIndex] = o.{{ .Name }}
-			argNumbers[index] = fmt.Sprintf("%d", globalIndex+1)
-			globalIndex++
-			index++
+		if err != nil {
+			return err
 		}
-		{{end}}
-		{{end}}
 
-		if len(options.IncludeFields) != 0 && len(options.IncludeFields) != index {
-			// If any field did not exist, it should be the most recent one in the list
-			return fmt.Errorf("Unknown field %s", options.IncludeFields[index])
+		for j, arg := range rowArgs {
+			args[globalIndex + j] = arg
 		}
 
 		// Add the value
@@ -628,8 +656,8 @@ func BatchInsert(
 
 	// sql query
 	insertFields := "{{ join .Table.Columns.DBNames.Sorted ", " }}"
-	if len(options.IncludeFields) > 0 {
-		insertFields = strings.Join(options.IncludeFields, ", ")
+	if len(options.GetFields()) > 0 {
+		insertFields = strings.Join(options.GetFields(), ", ")
 	}
 	var sqlstr = `INSERT INTO {{$schema}}.{{$table}} (` +
 		insertFields +
@@ -644,6 +672,41 @@ func BatchInsert(
 	return nil
 }
 
+// getFieldsAndArgs Returns a list of insert parameters starting from index,
+// such as []string{"$1", "$2"}, along with a collection of the args, for
+// the fields that should be updated.
+func getFieldsAndArgs(
+	ctx context.Context,
+	o Row,
+	globalIndex int,
+	includeFields []string,
+) ([]string, []interface{}, error) {
+	span, _ := opentracing.StartSpanFromContext(ctx, "getFieldsAndArgs_{{.Table.Name}}")
+	defer span.Finish()
+
+	var err error
+	argNumbers := make([]string, len(includeFields))
+	args := make([]interface{}, len(includeFields))
+
+	index := 0
+
+	{{- range .Table.Columns.DBNames.Sorted}}{{with index $colsByName .}}
+	if index < len(includeFields) && "{{.DBName}}" == includeFields[index] {
+		args[index] = o.{{ .Name }}
+		argNumbers[index] = fmt.Sprintf("%d", globalIndex+1)
+		globalIndex++
+		index++
+	}
+	{{end}}
+	{{end}}
+
+	if len(includeFields) != index {
+		// If any field did not exist, it should be the most recent one in the list
+		err = fmt.Errorf("Unknown field %s", includeFields[index])
+	}
+
+	return argNumbers, args, err
+}
 
 {{- if $child}}
 // UpsertFull Creates or updates record based on input for both parent and
@@ -655,7 +718,7 @@ func UpsertFull(ctx context.Context, db gnorm.DB, o FullRow) (FullRow, error) {
 	var err error
 
 	// Upsert the main record:
-	o.Parent, err = Upsert(ctx, db, o.Parent)
+	o.Parent, err = Upsert(ctx, db, o.Parent, InsertOptions{})
 	if err != nil {
 		return o, err
 	}
@@ -667,7 +730,7 @@ func UpsertFull(ctx context.Context, db gnorm.DB, o FullRow) (FullRow, error) {
 	{{end}}
 
 	// Upsert the child record:
-	o.Version, err = {{toLower $child.Name}}.Upsert(ctx, db, o.Version)
+	o.Version, err = {{toLower $child.Name}}.Upsert(ctx, db, o.Version, {{toLower $child.Name}}.InsertOptions{})
 	return o, err
 }
 {{end}}

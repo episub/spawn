@@ -58,6 +58,7 @@ github.com/dgryski/trifles v0.0.0-20200323201526-dd97f9abfb48/go.mod h1:if7Fbed8
 github.com/eapache/go-resiliency v1.1.0/go.mod h1:kFI+JgMyC7bLPUVY133qvEBtVayf5mFgVsvEsIPBvNs=
 github.com/eapache/go-xerial-snappy v0.0.0-20180814174437-776d5712da21/go.mod h1:+020luEh2TKB4/GOp8oxxtq0Daoen/Cii55CzbTV6DU=
 github.com/eapache/queue v1.1.0/go.mod h1:6eCeP0CKFpHLu8blIFXhExK/dRa7WDZfr6jVFPTqq+I=
+github.com/episub/gnorm v1.0.1-0.20200904063027-df1d70929cd7 h1:P9635bP8+vBlCMtji+C0C1fT8hEZeLSwb98y1nTCw1E=
 github.com/episub/gnorm v1.0.1-0.20200904063027-df1d70929cd7/go.mod h1:nA00OWBXvT1kyAZ6b9rIDonfrHBT0aN+FzyA5gUx2n8=
 github.com/episub/pqt v0.0.0-20181112131323-01e28ce941a0 h1:jwyJg0rlZMk4XG/YL/R36ubBpASuMly4ZKSYnuMGkCg=
 github.com/episub/pqt v0.0.0-20181112131323-01e28ce941a0/go.mod h1:+RKZLoHPFPW/GpjZfX1NRZE/3FfDVDdB/fQFa4ElwT0=
@@ -136,6 +137,7 @@ github.com/jackc/fake v0.0.0-20150926172116-812a484cc733/go.mod h1:WrMFNQdiFJ80s
 github.com/jackc/pgx v3.5.0+incompatible h1:BRJ4G3UPtvml5R1ey0biqqGuYUGayMYekm3woO75orY=
 github.com/jackc/pgx v3.5.0+incompatible/go.mod h1:0ZGrqGqkRlliWnWB4zKnWtjbSWbGkVEFm4TeybAXq+I=
 github.com/jellevandenhooff/dkim v0.0.0-20150330215556-f50fe3d243e1/go.mod h1:E0B/fFc00Y+Rasa88328GlI/XbtyysCtTHZS8h7IrBU=
+github.com/jinzhu/inflection v1.0.0 h1:K317FqzuhWc8YvSVlFMCCUb36O/S9MCKRDI7QkRKD/E=
 github.com/jinzhu/inflection v1.0.0/go.mod h1:h+uFLlag+Qp1Va5pdKtLDYj+kHp5pxUVkryuEj+Srlc=
 github.com/jstemmer/go-junit-report v0.0.0-20190106144839-af01ea7f8024/go.mod h1:6v2b51hI/fHJwM22ozAgKL4VKDeJcHhJFhtBdhmNjmU=
 github.com/julienschmidt/httprouter v1.2.0/go.mod h1:SYymIcj16QtmaHHD7aYtjjsJG7VTCxuUUipMqKk8s4w=

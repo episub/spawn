@@ -298,7 +298,7 @@ func (l *PostgresLoader) update{{.ModelName}}(ctx context.Context, db gnorm.DB, 
 		return nil
 	}
 
-	_, err = {{$package}}.Upsert{{$fullStr}}(ctx, db, o)
+	_, err = {{$package}}.Upsert{{$fullStr}}(ctx, db, o{{if $fullStr}}{{else}}, {{$package}}.InsertOptions{}{{end}})
 
 	return sanitiseError(err)
 }
@@ -354,7 +354,7 @@ func (l *PostgresLoader) create{{.ModelName}}(ctx context.Context, db gnorm.DB, 
 		return o, nil
 	}
 
-	o, err = {{$package}}.Upsert{{$fullStr}}(ctx, db, o)
+	o, err = {{$package}}.Upsert{{$fullStr}}(ctx, db, o{{if $fullStr}}{{else}}, {{$package}}.InsertOptions{}{{end}})
 
 	return o, sanitiseError(err)
 }

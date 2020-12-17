@@ -35,6 +35,8 @@ var cfg config
 var log = logrus.New()
 
 func main() {
+	var tracer opentracing.Tracer
+
 	err := env.Parse(&cfg)
 
 	if err != nil {

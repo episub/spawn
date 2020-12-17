@@ -22,6 +22,17 @@ name: TODO
 * Allow pagination for differing sort orders.  E.g., you may sort by boolField DESC, name ASC.  Pagination won't work with this.  Solution is to not use row value constructor and compare, but instead do something like "WHERE boolField < true OR (boolField = true AND name > 'myname').  Maybe use row value constructor when sort orders are all the same, and this alternative when not?  Not sure of performance impact.
 * Refactor static to use existing Go interfaces, including io.Reader and so forth, perhaps
 
+## Initial Gen TODO
+
+* Errors library
+* User account handling?
+* Policy checking in place with examples
+* CORS
+* Loader loading
+* mainInit function included
+* Example query and/or mutation tests
+* nextjs front end example?
+
 # Policy Changes
 
 For field permissions:
