@@ -1,7 +1,6 @@
 package validate
 
 import (
-	"context"
 	"fmt"
 	"unicode"
 )
@@ -24,7 +23,7 @@ var (
 
 // Password Checks the password for the given validator
 func Password(
-	ctx context.Context,
+	errors map[string][]string,
 	password string,
 	minLength uint,
 	validator PasswordValidator,
@@ -32,7 +31,7 @@ func Password(
 ) bool {
 	ok := validator.Validate(password, minLength)
 	if !ok {
-		return Fail(ctx, field, fmt.Sprintf(validator.Failure, minLength))
+		return Fail(field, errors, fmt.Sprintf(validator.Failure, minLength))
 	}
 	return ok
 }

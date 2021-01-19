@@ -1,7 +1,6 @@
 package util
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -11,7 +10,6 @@ import (
 
 	"cloud.google.com/go/civil"
 	"github.com/episub/pqt"
-	"github.com/episub/spawn/validate"
 	"github.com/gofrs/uuid"
 	"github.com/lib/pq"
 )
@@ -356,11 +354,11 @@ func MustNullUUID(v interface{}) (o uuid.NullUUID, err error) {
 	return
 }
 
-func MustValidateDate(ctx context.Context, path string, v interface{}) (pqt.Date, error) {
-	d, err := MustDate(v)
-	if err != nil {
-		d, err = validate.DateError(ctx, path, d, err)
-	}
-
-	return d, err
-}
+// func MustValidateDate(ctx context.Context, path string, v interface{}) (pqt.Date, error) {
+// 	d, err := MustDate(v)
+// 	if err != nil {
+// 		d, err = validate.DateError(ctx, path, d, err)
+// 	}
+//
+// 	return d, err
+// }

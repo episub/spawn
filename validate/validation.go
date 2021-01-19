@@ -1,9 +1,9 @@
 package validate
 
 import (
-	"context"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -21,9 +21,9 @@ var urlRx = regexp.MustCompile(`^(http:\/\/www\.|https:\/\/www\.|http:\/\/|https
 var aTrueRx = regexp.MustCompile(`^true$`)
 
 // Regex Confirms that value matches the provided regex
-func Regex(ctx context.Context, rx *regexp.Regexp, field string, value string, message string) bool {
+func Regex(field string, errors map[string][]string, rx *regexp.Regexp, value string, message string) bool {
 	if !rx.MatchString(value) {
-		AddError(ctx, field, message)
+		AddError(errors, field, message)
 		return false
 	}
 
@@ -31,20 +31,20 @@ func Regex(ctx context.Context, rx *regexp.Regexp, field string, value string, m
 }
 
 // Email Checks that email address is valid
-func Email(ctx context.Context, field string, email string) bool {
-	return Regex(ctx, emailRx, field, email, fmt.Sprintf("Email address '%s' is invalid", email))
+func Email(field string, errors map[string][]string, email string) bool {
+	return Regex(field, errors, emailRx, email, fmt.Sprintf("Email address '%s' is invalid", email))
 }
 
 // Fail Used for testing, always fails and adds the message
-func Fail(ctx context.Context, field string, message string) bool {
-	AddError(ctx, field, message)
+func Fail(field string, errors map[string][]string, message string) bool {
+	AddError(errors, field, message)
 	return false
 }
 
 // NoError used when there's an error.  If there's an error, then it fails
-func NoError(ctx context.Context, err error, field string, message string) bool {
+func NoError(field string, errors map[string][]string, err error, message string) bool {
 	if err != nil {
-		AddError(ctx, field, message)
+		AddError(errors, field, message)
 		return false
 	}
 
@@ -52,16 +52,16 @@ func NoError(ctx context.Context, err error, field string, message string) bool 
 }
 
 // False Checks that a value is true
-func False(ctx context.Context, field string, v bool, msg string) bool {
+func False(field string, errors map[string][]string, v bool, msg string) bool {
 	if v {
-		AddError(ctx, field, msg)
+		AddError(errors, field, msg)
 	}
 
 	return !v
 }
 
 // Length Requires the string to be a length between m and n inclusive
-func Length(ctx context.Context, field, v string, m int, n int) bool {
+func Length(field string, errors map[string][]string, v string, m int, n int) bool {
 	var msg string
 	if m == n {
 		msg = fmt.Sprintf("Must be exactly %d characters long", m)
@@ -70,7 +70,7 @@ func Length(ctx context.Context, field, v string, m int, n int) bool {
 	}
 
 	if len(v) < m || len(v) > n {
-		AddError(ctx, field, msg)
+		AddError(errors, field, msg)
 		return false
 	}
 
@@ -78,18 +78,18 @@ func Length(ctx context.Context, field, v string, m int, n int) bool {
 }
 
 // MinimumLength Requires the minimum length for a string to be n characters
-func MinimumLength(ctx context.Context, n int, v string, field string) bool {
+func MinimumLength(field string, errors map[string][]string, n int, v string) bool {
 	if len(v) < n {
-		AddError(ctx, field, fmt.Sprintf("Must be at least %d characters long", n))
+		AddError(errors, field, fmt.Sprintf("Must be at least %d characters long", n))
 		return false
 	}
 	return true
 }
 
 // StringsNotEqual Verifies that the two provided values are not equal
-func StringsNotEqual(ctx context.Context, field, a, b, msg string) bool {
+func StringsNotEqual(field string, errors map[string][]string, a, b, msg string) bool {
 	if a == b {
-		AddError(ctx, field, msg)
+		AddError(errors, field, msg)
 		return false
 	}
 
@@ -97,11 +97,11 @@ func StringsNotEqual(ctx context.Context, field, a, b, msg string) bool {
 }
 
 //UUID Verifies that provided string is a UUID
-func UUID(ctx context.Context, field, id string, msg string) bool {
+func UUID(field string, errors map[string][]string, id string) bool {
 	_, err := uuid.FromString(id)
 
 	if err != nil {
-		AddError(ctx, field, msg)
+		AddError(errors, field, "Expected UUID for field "+field)
 		return false
 	}
 
@@ -109,19 +109,19 @@ func UUID(ctx context.Context, field, id string, msg string) bool {
 }
 
 // Numbers Must be a string containing only numbers
-func Numbers(ctx context.Context, field string, v string) bool {
-	return !Regex(ctx, numberRx, field, v, "Must be a number")
+func Numbers(field string, errors map[string][]string, v string) bool {
+	return !Regex(field, errors, numberRx, v, "Must be numbers only")
 }
 
 // Phone Must be a string containing only numbers
-func Phone(ctx context.Context, field string, v string) bool {
-	return Numbers(ctx, field, v) && Length(ctx, field, v, 7, 13)
+func Phone(field string, errors map[string][]string, v string) bool {
+	return Numbers(field, errors, v) && Length(field, errors, v, 7, 13)
 }
 
 // Positive Checks that an integer is positive
-func Positive(ctx context.Context, field string, v int) bool {
+func Positive(field string, errors map[string][]string, v int) bool {
 	if v < 0 {
-		AddError(ctx, field, "Must be positive")
+		AddError(errors, field, "Must be positive")
 		return false
 	}
 
@@ -129,43 +129,43 @@ func Positive(ctx context.Context, field string, v int) bool {
 }
 
 // Username Username validation
-func Username(ctx context.Context, field string, v string) bool {
-	return !Regex(ctx, usernameRx, field, v, "Usernames can only contain letters, numbers, underscores and hyphens, and must not begin or end with an underscore or hyphen")
+func Username(field string, errors map[string][]string, v string) bool {
+	return !Regex(field, errors, usernameRx, v, "Usernames can only contain letters, numbers, underscores and hyphens, and must not begin or end with an underscore or hyphen")
 }
 
 // LettersWithSpaces Must only contain letters and spaces
-func LettersWithSpaces(ctx context.Context, field string, v string) bool {
-	return !Regex(ctx, lettersWithSpacesRx, field, v, "Must only contain letters and spaces")
+func LettersWithSpaces(field string, errors map[string][]string, v string) bool {
+	return !Regex(field, errors, lettersWithSpacesRx, v, "Must only contain letters and spaces")
 }
 
 // LettersWithNumbers Must be a string containing only numbers
-func LettersWithNumbers(ctx context.Context, field string, v string) bool {
-	return !Regex(ctx, lettersWithNumbersRx, field, v, "Must only contain letters and numbers")
+func LettersWithNumbers(field string, errors map[string][]string, v string) bool {
+	return !Regex(field, errors, lettersWithNumbersRx, v, "Must only contain letters and numbers")
 }
 
 // LettersSpacesAndNumbers Must be a string containing only numbers
-func LettersSpacesAndNumbers(ctx context.Context, field string, v string) bool {
-	return !Regex(ctx, lettersSpacesAndNumbersRx, field, v, "Must only contain letters, spaces and numbers")
+func LettersSpacesAndNumbers(field string, errors map[string][]string, v string) bool {
+	return !Regex(field, errors, lettersSpacesAndNumbersRx, v, "Must only contain letters, spaces and numbers")
 }
 
 // URL Checks that URL is valid
-func URL(ctx context.Context, field string, v string) bool {
-	return !Regex(ctx, urlRx, field, v, "Website URL is invalid")
+func URL(field string, errors map[string][]string, v string) bool {
+	return !Regex(field, errors, urlRx, v, "Website URL is invalid")
 }
 
 // True Checks that a value is true
-func True(ctx context.Context, field string, v bool) bool {
+func True(field string, errors map[string][]string, v bool, msg string) bool {
 	if !v {
-		AddError(ctx, field, fmt.Sprintf("Must be true"))
+		AddError(errors, field, msg)
 	}
 
-	return v
+	return !v
 }
 
 // After Checks that a date value is after given date value to be compared with
-func After(ctx context.Context, field string, v civil.Date, dateToCompareWith civil.Date) bool {
+func After(field string, errors map[string][]string, v civil.Date, dateToCompareWith civil.Date) bool {
 	if !v.After(dateToCompareWith) {
-		AddError(ctx, field, "Date should be after "+dateToCompareWith.String())
+		AddError(errors, field, "Date should be after "+dateToCompareWith.String())
 		return false
 	}
 
@@ -173,38 +173,38 @@ func After(ctx context.Context, field string, v civil.Date, dateToCompareWith ci
 }
 
 // AfterNow Checks that a date value is after now
-func AfterNow(ctx context.Context, field string, v civil.Date) bool {
+func AfterNow(field string, errors map[string][]string, v civil.Date) bool {
 	now := civil.DateOf(time.Now().Add((time.Hour * -24)))
-	return After(ctx, field, v, now)
+	return After(field, errors, v, now)
 }
 
 // DOB Checks that a date value is before 18 years from now
-func DOB(ctx context.Context, field string, v civil.Date) bool {
+func DOB(field string, errors map[string][]string, v civil.Date) bool {
 	now := time.Now()
 	minAge := civil.Date{
 		Day:   (now.Year() - 18),
 		Month: now.Month(),
 		Year:  now.Day(),
 	}
-	return After(ctx, field, v, minAge)
+	return After(field, errors, v, minAge)
 }
 
 // IN Checks that a value is an item within an array
-func IN(ctx context.Context, field string, v string, array []string) bool {
+func IN(field string, errors map[string][]string, v string, array []string) bool {
 	for _, element := range array {
 		if element == v {
 			return true
 		}
 	}
 
-	AddError(ctx, field, "Value not allowed")
+	AddError(errors, field, "Value not allowed.  Must be one of: "+strings.Join(array, ", "))
 	return false
 }
 
 // IntsEqual Verifies that the two integers are equal
-func IntsEqual(ctx context.Context, field string, a, b int, msg string) bool {
+func IntsEqual(field string, errors map[string][]string, a, b int, msg string) bool {
 	if a != b {
-		AddError(ctx, field, msg)
+		AddError(errors, field, msg)
 		return false
 	}
 

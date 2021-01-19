@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/99designs/gqlgen/graphql"
 	"github.com/episub/pqt"
-	"github.com/vektah/gqlparser/gqlerror"
 )
 
 // Error Used for passing back validation errors to the resolvers, without having to know anything about graphQL ourselves
@@ -19,27 +17,15 @@ type Error struct {
 const validationValue = "validationErrors"
 
 // AddError Adds a validation error to the context, including adding a graphql
-func AddError(ctx context.Context, field string, message string) {
-	ve := GetErrorsFromContext(ctx)
-	(*ve) = append(*ve, Error{Field: field, Message: message})
-
-	// Add this as a graphQL error as well:
-	rctx := graphql.GetResolverContext(ctx)
-	if rctx != nil {
-		graphql.AddError(ctx, &gqlerror.Error{
-			Message: message,
-			Extensions: map[string]interface{}{
-				"field": field,
-			},
-		})
-	}
+func AddError(errors map[string][]string, field string, message string) {
+	errors[field] = append(errors[field], message)
 }
 
 // DateError Checks a date value and its error, returning nil as the error and adding as a validation error if appropriate
-func DateError(ctx context.Context, field string, d pqt.Date, err error) (pqt.Date, error) {
+func DateError(errors map[string][]string, field string, d pqt.Date, err error) (pqt.Date, error) {
 	switch {
 	case (strings.Contains(err.Error(), "parsing time") && strings.Contains(err.Error(), "cannot parse")):
-		AddError(ctx, field, "Invalid value for date")
+		AddError(errors, field, "Invalid value for date")
 		return d, nil
 	default:
 		return d, err
