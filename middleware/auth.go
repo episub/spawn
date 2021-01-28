@@ -225,13 +225,32 @@ func (a Auth) AuthenticationHandler(w http.ResponseWriter, r *http.Request) {
 	f := func(r *http.Request) (User, error) {
 		var username, password string
 
-		// Grab username and password
-		if len(r.URL.Query()["username"]) > 0 {
-			username = r.URL.Query()["username"][0]
-		}
+		// If GET request, grab from URL (insecure).  If POST, grab from form data
 
-		if len(r.URL.Query()["password"]) > 0 {
-			password = r.URL.Query()["password"][0]
+		if r.Method == http.MethodGet {
+			// Grab username and password
+			if len(r.URL.Query()["username"]) > 0 {
+				username = r.URL.Query()["username"][0]
+			}
+
+			if len(r.URL.Query()["password"]) > 0 {
+				password = r.URL.Query()["password"][0]
+			}
+		} else if r.Method == http.MethodPost {
+			err := r.ParseMultipartForm(0)
+			if err != nil {
+				log.Printf("Error parsing form: %s", err)
+			}
+
+			for key, value := range r.PostForm {
+				if key == "username" && len(value) == 1 {
+					username = value[0]
+				}
+
+				if key == "password" && len(value) == 1 {
+					password = value[0]
+				}
+			}
 		}
 
 		// If no username or password provided, request is bad
