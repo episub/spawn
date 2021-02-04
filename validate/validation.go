@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"time"
 
+	"github.com/episub/spawn/form"
 	"github.com/gofrs/uuid"
-
-	"cloud.google.com/go/civil"
 )
+
+var ErrMustBeString = fmt.Errorf("Field must be a string")
+var ErrMustBeBool = fmt.Errorf("Field must be a boolean")
+var ErrMustBeInt = fmt.Errorf("Field must be an integer")
 
 var numberRx = regexp.MustCompile(`^-?\d*$`)
 var emailRx = regexp.MustCompile(`^\S+@\S+$`)
@@ -20,193 +22,254 @@ var lettersSpacesAndNumbersRx = regexp.MustCompile(`^[- 'a-zA-ZÀ-ÖØ-öø-ÿ0-
 var urlRx = regexp.MustCompile(`^(http:\/\/www\.|https:\/\/www\.|http:\/\/|https:\/\/)?[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,5}(:[0-9]{1,5})?(\/.*)?$`)
 var aTrueRx = regexp.MustCompile(`^true$`)
 
-// Regex Confirms that value matches the provided regex
-func Regex(field string, errors map[string][]string, rx *regexp.Regexp, value string, message string) bool {
-	if !rx.MatchString(value) {
-		AddError(errors, field, message)
-		return false
-	}
+// OrChain Chains two or more validations in an or arrangement
+func OrChain(validators ...form.Validator) form.Validator {
+	return func(s interface{}) error {
+		var errors []string
+		for _, vd := range validators {
+			err := vd(s)
+			if err != nil {
+				errors = append(errors, err.Error())
+			} else {
+				// Just need one in chain to pass for this to be fine
+				return nil
+			}
+		}
 
-	return true
+		// Happens if there are no validators
+		if len(errors) == 0 {
+			return nil
+		}
+
+		return fmt.Errorf(strings.Join(errors, " or "))
+	}
+}
+
+// Regex Confirms that value matches the provided regex
+func Regex(rx *regexp.Regexp, message string) form.Validator {
+	return func(s interface{}) error {
+		value, ok := s.(string)
+		if !ok {
+			return fmt.Errorf("Field must be string")
+		}
+		if !rx.MatchString(value) {
+			return fmt.Errorf(message)
+		}
+
+		return nil
+	}
 }
 
 // Email Checks that email address is valid
-func Email(field string, errors map[string][]string, email string) bool {
-	return Regex(field, errors, emailRx, email, fmt.Sprintf("Email address '%s' is invalid", email))
+func Email() form.Validator {
+	return Regex(emailRx, "Email address is invalid")
 }
 
 // Fail Used for testing, always fails and adds the message
-func Fail(field string, errors map[string][]string, message string) bool {
-	AddError(errors, field, message)
-	return false
+func Fail(message string) form.Validator {
+	return func(v interface{}) error {
+		return fmt.Errorf(message)
+	}
 }
 
 // NoError used when there's an error.  If there's an error, then it fails
-func NoError(field string, errors map[string][]string, err error, message string) bool {
-	if err != nil {
-		AddError(errors, field, message)
-		return false
-	}
+func NoError(message string) form.Validator {
+	return func(v interface{}) error {
+		err, ok := v.(error)
+		if !ok {
+			return fmt.Errorf("Value must be an error")
+		}
+		if err != nil {
 
-	return true
+			return fmt.Errorf("message")
+		}
+
+		return nil
+	}
 }
 
 // False Checks that a value is true
-func False(field string, errors map[string][]string, v bool, msg string) bool {
-	if v {
-		AddError(errors, field, msg)
-	}
+func False(msg string) form.Validator {
+	return func(v interface{}) error {
+		b, ok := v.(bool)
+		if !ok {
+			return fmt.Errorf("Value must be a bool")
+		}
 
-	return !v
+		if b {
+			return fmt.Errorf(msg)
+		}
+
+		return nil
+	}
 }
 
 // Length Requires the string to be a length between m and n inclusive
-func Length(field string, errors map[string][]string, v string, m int, n int) bool {
-	var msg string
-	if m == n {
-		msg = fmt.Sprintf("Must be exactly %d characters long", m)
-	} else {
-		msg = fmt.Sprintf("Must be between %d and %d characters long", m, n)
-	}
+func Length(m int, n int) form.Validator {
+	return func(v interface{}) error {
+		field, ok := v.(string)
+		if !ok {
+			return ErrMustBeString
+		}
 
-	if len(v) < m || len(v) > n {
-		AddError(errors, field, msg)
-		return false
-	}
+		var msg string
+		if m == n {
+			msg = fmt.Sprintf("Must be exactly %d characters long", m)
+		} else {
+			msg = fmt.Sprintf("Must be between %d and %d characters long", m, n)
+		}
 
-	return true
+		if len(field) < m || len(field) > n {
+			return fmt.Errorf(msg)
+		}
+
+		return nil
+	}
 }
 
 // MinimumLength Requires the minimum length for a string to be n characters
-func MinimumLength(field string, errors map[string][]string, n int, v string) bool {
-	if len(v) < n {
-		AddError(errors, field, fmt.Sprintf("Must be at least %d characters long", n))
-		return false
+func MinimumLength(n int) form.Validator {
+	return func(s interface{}) error {
+		v, ok := s.(string)
+		if !ok {
+			return ErrMustBeString
+		}
+		if len(v) < n {
+			return fmt.Errorf("Must be at least %d characters long", n)
+		}
+		return nil
 	}
-	return true
-}
-
-// StringsNotEqual Verifies that the two provided values are not equal
-func StringsNotEqual(field string, errors map[string][]string, a, b, msg string) bool {
-	if a == b {
-		AddError(errors, field, msg)
-		return false
-	}
-
-	return true
 }
 
 //UUID Verifies that provided string is a UUID
-func UUID(field string, errors map[string][]string, id string) bool {
-	_, err := uuid.FromString(id)
+func UUID() form.Validator {
+	return func(s interface{}) error {
+		v, ok := s.(string)
+		if !ok {
+			return ErrMustBeString
+		}
+		_, err := uuid.FromString(v)
 
-	if err != nil {
-		AddError(errors, field, "Expected UUID for field "+field)
-		return false
+		if err != nil {
+			return fmt.Errorf("Expected UUID for field")
+		}
+
+		return nil
 	}
-
-	return true
 }
 
 // Numbers Must be a string containing only numbers
-func Numbers(field string, errors map[string][]string, v string) bool {
-	return !Regex(field, errors, numberRx, v, "Must be numbers only")
-}
-
-// Phone Must be a string containing only numbers
-func Phone(field string, errors map[string][]string, v string) bool {
-	return Numbers(field, errors, v) && Length(field, errors, v, 7, 13)
+func Numbers() form.Validator {
+	return Regex(numberRx, "Must be numbers only")
 }
 
 // Positive Checks that an integer is positive
-func Positive(field string, errors map[string][]string, v int) bool {
-	if v < 0 {
-		AddError(errors, field, "Must be positive")
-		return false
-	}
+func Positive() form.Validator {
+	return func(s interface{}) error {
+		v, ok := s.(int)
+		if !ok {
+			return ErrMustBeInt
+		}
+		if v < 0 {
+			return fmt.Errorf("Must be positive")
+		}
 
-	return true
+		return nil
+	}
 }
 
 // Username Username validation
-func Username(field string, errors map[string][]string, v string) bool {
-	return !Regex(field, errors, usernameRx, v, "Usernames can only contain letters, numbers, underscores and hyphens, and must not begin or end with an underscore or hyphen")
+func Username() form.Validator {
+	return Regex(usernameRx, "Usernames can only contain letters, numbers, underscores and hyphens, and must not begin or end with an underscore or hyphen")
 }
 
 // LettersWithSpaces Must only contain letters and spaces
-func LettersWithSpaces(field string, errors map[string][]string, v string) bool {
-	return !Regex(field, errors, lettersWithSpacesRx, v, "Must only contain letters and spaces")
+func LettersWithSpaces() form.Validator {
+	return Regex(lettersWithSpacesRx, "Must only contain letters and spaces")
 }
 
 // LettersWithNumbers Must be a string containing only numbers
-func LettersWithNumbers(field string, errors map[string][]string, v string) bool {
-	return !Regex(field, errors, lettersWithNumbersRx, v, "Must only contain letters and numbers")
+func LettersWithNumbers() form.Validator {
+	return Regex(lettersWithNumbersRx, "Must only contain letters and numbers")
 }
 
 // LettersSpacesAndNumbers Must be a string containing only numbers
-func LettersSpacesAndNumbers(field string, errors map[string][]string, v string) bool {
-	return !Regex(field, errors, lettersSpacesAndNumbersRx, v, "Must only contain letters, spaces and numbers")
+func LettersSpacesAndNumbers() form.Validator {
+	return Regex(lettersSpacesAndNumbersRx, "Must only contain letters, spaces and numbers")
 }
 
 // URL Checks that URL is valid
-func URL(field string, errors map[string][]string, v string) bool {
-	return !Regex(field, errors, urlRx, v, "Website URL is invalid")
+func URL() form.Validator {
+	return Regex(urlRx, "Website URL is invalid")
 }
 
 // True Checks that a value is true
-func True(field string, errors map[string][]string, v bool, msg string) bool {
-	if !v {
-		AddError(errors, field, msg)
-	}
-
-	return !v
-}
-
-// After Checks that a date value is after given date value to be compared with
-func After(field string, errors map[string][]string, v civil.Date, dateToCompareWith civil.Date) bool {
-	if !v.After(dateToCompareWith) {
-		AddError(errors, field, "Date should be after "+dateToCompareWith.String())
-		return false
-	}
-
-	return true
-}
-
-// AfterNow Checks that a date value is after now
-func AfterNow(field string, errors map[string][]string, v civil.Date) bool {
-	now := civil.DateOf(time.Now().Add((time.Hour * -24)))
-	return After(field, errors, v, now)
-}
-
-// DOB Checks that a date value is before 18 years from now
-func DOB(field string, errors map[string][]string, v civil.Date) bool {
-	now := time.Now()
-	minAge := civil.Date{
-		Day:   (now.Year() - 18),
-		Month: now.Month(),
-		Year:  now.Day(),
-	}
-	return After(field, errors, v, minAge)
-}
-
-// IN Checks that a value is an item within an array
-func IN(field string, errors map[string][]string, v string, array []string) bool {
-	for _, element := range array {
-		if element == v {
-			return true
+func True(msg string) form.Validator {
+	return func(s interface{}) error {
+		v, ok := s.(bool)
+		if !ok {
+			return ErrMustBeBool
 		}
-	}
 
-	AddError(errors, field, "Value not allowed.  Must be one of: "+strings.Join(array, ", "))
-	return false
+		if !v {
+			return fmt.Errorf(msg)
+		}
+
+		return nil
+	}
 }
 
-// IntsEqual Verifies that the two integers are equal
-func IntsEqual(field string, errors map[string][]string, a, b int, msg string) bool {
-	if a != b {
-		AddError(errors, field, msg)
-		return false
-	}
-
-	return true
-}
+// // After Checks that a date value is after given date value to be compared with
+// func After(field string, errors map[string][]string, v civil.Date, dateToCompareWith civil.Date) form.Validator {
+// 	return func(v interface{}) error {
+// 	if !v.After(dateToCompareWith) {
+// 		AddError(errors, field, "Date should be after "+dateToCompareWith.String())
+// 		return false
+// 	}
+//
+// 	return true
+// }
+//
+// // AfterNow Checks that a date value is after now
+// func AfterNow(field string, errors map[string][]string, v civil.Date) form.Validator {
+// 	return func(v interface{}) error {
+// 	now := civil.DateOf(time.Now().Add((time.Hour * -24)))
+// 	return After(field, errors, v, now)
+// }
+//
+// // DOB Checks that a date value is before 18 years from now
+// func DOB(field string, errors map[string][]string, v civil.Date) form.Validator {
+// 	return func(v interface{}) error {
+// 	now := time.Now()
+// 	minAge := civil.Date{
+// 		Day:   (now.Year() - 18),
+// 		Month: now.Month(),
+// 		Year:  now.Day(),
+// 	}
+// 	return After(field, errors, v, minAge)
+// }
+//
+// // IN Checks that a value is an item within an array
+// func IN(field string, errors map[string][]string, v string, array []string) form.Validator {
+// 	return func(v interface{}) error {
+// 	for _, element := range array {
+// 		if element == v {
+// 			return true
+// 		}
+// 	}
+//
+// 	AddError(errors, field, "Value not allowed.  Must be one of: "+strings.Join(array, ", "))
+// 	return false
+// }
+//
+// // IntsEqual Verifies that the two integers are equal
+// func IntsEqual(field string, errors map[string][]string, a, b int, msg string) form.Validator {
+// 	return func(v interface{}) error {
+// 	if a != b {
+// 		AddError(errors, field, msg)
+// 		return false
+// 	}
+//
+// 	return true
+// }
+// }
