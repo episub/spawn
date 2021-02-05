@@ -24,6 +24,22 @@ type Definition struct {
 	Fields map[string]FieldDefinition
 }
 
+// GetGroup Separates out all fields that belong to the specified group.  Should
+// only be used on a processed map
+func GetGroup(def Definition, group string, m map[string]interface{}) map[string]interface{} {
+	out := make(map[string]interface{})
+	for _, field := range def.Fields {
+		if field.Group == group {
+			v, ok := m[field.Name]
+			if ok {
+				out[field.Name] = v
+			}
+		}
+	}
+
+	return out
+}
+
 func ApplyDefinition(def Definition, m map[string]interface{}) (map[string]interface{}, map[string][]error) {
 	applied := make(map[string]interface{})
 	// Loop over this form's definitions, enforcing fields match the type that
