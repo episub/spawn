@@ -17,14 +17,11 @@ func init() {
 	// Add each driver to be tested:
 	var err error
 
-	dbHost := os.Getenv("PG_HOST")
-	dbUser := os.Getenv("PG_USER")
-	dbPass := os.Getenv("PG_PASS")
-	dbName := os.Getenv("PG_DB")
+	dbConn := os.Getenv("PG_CONNSTRING")
 	dbSchema := os.Getenv("PG_SCHEMA")
 	dbTable := os.Getenv("PG_TABLE")
 
-	mDriver, err := NewPostgresDriver(dbUser, dbPass, dbHost, dbName, dbSchema, dbTable)
+	mDriver, err := NewPostgresDriver(dbConn, dbSchema, dbTable)
 
 	if err != nil {
 		panic(err)

@@ -12,13 +12,14 @@ func NewSyncManager(driver Driver) SyncManager {
 	var sm SyncManager
 	sm.driver = driver
 	sm.registeredActions = make(map[string]TaskAction)
-	sm.actionQueue = make(chan (ScheduledAction))
 	sm.actionStreams = make(map[string]chan (ScheduledAction))
 	sm.taskQueue = make(chan (taskQueueAction))
 	sm.cancel = make(chan (bool))
 	sm.registerMutex = &sync.Mutex{}
 
 	sm.errorHandler = defaultErrorHandler
+	mx := sync.Mutex{}
+	sm.getStreamMX = &mx
 
 	return sm
 }
@@ -30,7 +31,6 @@ type taskQueueAction struct {
 
 // SyncManager is the central process for running actions
 type SyncManager struct {
-	actionQueue       chan (ScheduledAction)
 	actionStreams     map[string]chan (ScheduledAction)
 	taskQueue         chan (taskQueueAction)
 	cancel            chan (bool)
@@ -38,6 +38,25 @@ type SyncManager struct {
 	registeredActions map[string]TaskAction
 	registerMutex     *sync.Mutex
 	errorHandler      func(error)
+	getStreamMX       *sync.Mutex
+}
+
+func (s *SyncManager) getStreamQueue(name string) chan ScheduledAction {
+	var stream chan ScheduledAction
+	var ok bool
+
+	s.getStreamMX.Lock()
+	defer s.getStreamMX.Unlock()
+
+	if stream, ok = s.actionStreams[name]; !ok {
+		// No such stream exists, so let's create first
+		stream = make(chan (ScheduledAction))
+		s.actionStreams[name] = stream
+		// Run a goroutine that handles actions from this stream:
+		s.runStream(stream)
+	}
+
+	return stream
 }
 
 // Run Runs the main loop that keeps the queue running and performs actions at specified intervals
@@ -48,23 +67,6 @@ func (s *SyncManager) Run() {
 
 	for {
 		select {
-		case action := <-s.actionQueue:
-			a := action
-			// We check if a stream (chan) exists for this action, and if not we
-			// create and spin it up first.  After that, we send tasks off to run
-
-			// Check for existing stream:
-			var stream chan ScheduledAction
-			var ok bool
-			if stream, ok = s.actionStreams[action.Stream()]; !ok {
-				// No such stream exists, so let's create first
-				stream = make(chan (ScheduledAction))
-				s.actionStreams[action.Stream()] = stream
-				// Run a goroutine that handles actions from this stream:
-				s.runStream(stream)
-			}
-			// Add this task to the queue, but in a goroutine so that we don't block:
-			go func(stream chan ScheduledAction) { stream <- a }(stream)
 		case <-s.cancel:
 			return
 		case tqa := <-s.taskQueue:
@@ -180,11 +182,15 @@ func (s *SyncManager) Stop() {
 func (s *SyncManager) Schedule(act ScheduledAction, period time.Duration) {
 	ticker := time.NewTicker(period)
 
+	// We fetch a reference to the stream's channel so that we can schedule
+	// our task
+	stream := s.getStreamQueue(act.Stream())
+
 	go func(act ScheduledAction, ticker *time.Ticker) {
 		for {
 			<-ticker.C
 
-			s.actionQueue <- act
+			stream <- act
 		}
 	}(act, ticker)
 }

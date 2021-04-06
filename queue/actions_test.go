@@ -18,6 +18,11 @@ func (ea *ExampleScheduledAction) Do() error {
 
 }
 
+func (ea *ExampleScheduledAction) Stream() string {
+	return "test"
+
+}
+
 func NewExampleTaskAction(result chan bool) ExampleTaskAction {
 	ea := ExampleTaskAction{}
 
