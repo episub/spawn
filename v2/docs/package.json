@@ -1,0 +1,12 @@
+{
+  "name": "spawn",
+  "license": "MIT",
+  "scripts": {
+    "docz:dev": "docz dev",
+    "docz:build": "docz build"
+  },
+  "devDependencies": {
+    "docz": "^1.0.0-rc.3",
+    "docz-theme-default": "^1.0.0-rc.3"
+  }
+}

@@ -1,0 +1,43 @@
+---
+name: TODO
+---
+
+#  TODO
+
+* Implement field level permission checks for create actions
+* Change string field names to a new type so we can explicitly require them
+* Optimisation: Eliminate the two-step paginated query steps in templates
+* Remove files in cmd/static/gnorm if not used.  db.go is not, I think
+* Batched queries:
+    * Don't have db as a parameter when it's not even used
+    * Have a non-batched option that can be used for transactions
+* Update all return values in `cmd/static/loader/gen.gotmpl`  to return sanitised errors
+* Allow modification of all the template files, like with gnorm
+* Instead of map, consider using a struct, with a string array naming the fields that are provided or to be updated, to allow us to distinguish between 'no change' vs 'null this field'.
+* Obfuscate cursor in pagination
+* Simplify the config so that some parts (ModelPackageShort) can be automatically calculated when not provided
+* Consider a migration tool like goose, sql-migrate, mattes/migrate
+* Automatic generate docs for auto gen code
+* Provide hydrate function with db connection and have it return error
+* Allow pagination for differing sort orders.  E.g., you may sort by boolField DESC, name ASC.  Pagination won't work with this.  Solution is to not use row value constructor and compare, but instead do something like "WHERE boolField < true OR (boolField = true AND name > 'myname').  Maybe use row value constructor when sort orders are all the same, and this alternative when not?  Not sure of performance impact.
+* Refactor static to use existing Go interfaces, including io.Reader and so forth, perhaps
+
+## Initial Gen TODO
+
+* Errors library
+* User account handling?
+* Policy checking in place with examples
+* CORS
+* Loader loading
+* mainInit function included
+* Example query and/or mutation tests
+* nextjs front end example?
+
+# Policy Changes
+
+For field permissions:
+
+* Retire viewField
+* Cache the allowedFields list where ID() method exists on object
+* Cache the allowedFields where there is a policy that permits that field to be
+cached.  E.g., suppliersConnection.edges.node should be fine to cache

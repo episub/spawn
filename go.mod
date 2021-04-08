@@ -11,8 +11,6 @@ require (
 	github.com/cockroachdb/apd v1.1.0 // indirect
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
 	github.com/codemodus/kace v0.5.1
-	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect
-	github.com/davecgh/go-spew v1.1.1
 	github.com/episub/pqt v0.0.0-20181112131323-01e28ce941a0
 	github.com/fatih/color v1.7.0 // indirect
 	github.com/getsentry/sentry-go v0.2.1
@@ -20,17 +18,16 @@ require (
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gofrs/uuid v3.2.0+incompatible
 	github.com/gorilla/websocket v1.4.2 // indirect
-	github.com/h2non/filetype v1.0.10
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/hokaccha/go-prettyjson v0.0.0-20180920040306-f579f869bbfe
 	github.com/jackc/fake v0.0.0-20150926172116-812a484cc733 // indirect
 	github.com/jackc/pgx v3.5.0+incompatible
 	github.com/jmoiron/sqlx v1.3.1
 	github.com/lib/pq v1.2.0
-	github.com/matryer/moq v0.0.0-20200607124540-4638a53893e6 // indirect
 	github.com/mattn/go-runewidth v0.0.4 // indirect
 	github.com/mitchellh/mapstructure v1.3.2
 	github.com/nbutton23/zxcvbn-go v0.0.0-20180912185939-ae427f1e4c1d
+	github.com/oleiade/reflections v1.0.1 // indirect
 	github.com/open-policy-agent/opa v0.16.0
 	github.com/opentracing-contrib/go-stdlib v0.0.0-20190324214902-3020fec0e66b
 	github.com/opentracing/opentracing-go v1.1.0
@@ -50,8 +47,6 @@ require (
 	github.com/uber/jaeger-client-go v2.16.0+incompatible
 	github.com/uber/jaeger-lib v2.0.0+incompatible // indirect
 	github.com/urfave/cli v1.20.0
-	github.com/urfave/cli/v2 v2.2.0 // indirect
-	github.com/vektah/dataloaden v0.3.0 // indirect
 	github.com/vektah/gqlparser v1.1.2
 	github.com/vektah/gqlparser/v2 v2.0.1
 	gnorm.org/gnorm v1.0.0
@@ -62,4 +57,4 @@ require (
 	gopkg.in/yaml.v2 v2.3.0
 )
 
-replace gnorm.org/gnorm => github.com/episub/gnorm v1.0.1-0.20200904063027-df1d70929cd7
+replace gnorm.org/gnorm => github.com/episub/gnorm v1.1.2

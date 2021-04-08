@@ -1,0 +1,15 @@
+---
+name: Comparison
+---
+
+# Hasura
+
+Hasura is very fast for getting a postgres GraphQL API up and running, and is very fast when running as well.  Spawn and Hasura follow different philosophies.  Hasura is designed to give you the tools to easily build such a GraphQL API without the need to do any coding, while Spawn is designed to give you a decent out-of-the-box code first GraphQL API that can be customised as much as you like.
+
+As of the time of comparing, suppose that you want to build a custom resolver or mutation that doesn't map neatly to your postgres data structure (generally, your database model will diverge from your applications' models, so this is inevitable).  Perhaps you want to add, for example, an 'approveInvoice' mutation separate from the standard update_invoice mutation that Hasura provides.  In this case, you will use [schema stitching](https://docs.hasura.io/1.0/graphql/manual/remote-schemas/index.html).  You will create a separate GraphQL service, and then point Hasura to it, and Hasura will easily merge the two schemas together into a whole.  As a solution for merging GraphQL API's, this does the job well.  If you do this, you could use a Spawn-built API and stitch it together with Hasura.
+
+You may wish to choose Spawn over Hasura if you think that you're going to be writing custom mutations or resolvers, and want tighter control over the schema.  [gqlgen](https://gqlgen.com), used by Spawn, gives you the ability to build exactly the schema you want.  Once you need to start writing a separate GraphQL service, you're going to want to solve the problem of talking to your database (unless you want to use Hasura as a middle layer, which adds some extra overhead).  If you're already generating your basic CRUD queries via something like Spawn (which uses [gnorm](https://gnorm.org)), you have the ability to do these actions easily.  As your application's model of the world diverges more from the database, you may find yourself leaning on the custom GraphQL API more than Hasura's.  In such situations, there may not be much value for you in maintaining two or more API's, and therefore opting for just one is preferable.
+
+For simple tasks, like validating data before inserting, updating, or deleting, you may find yourself [needing to use schema stitching](https://github.com/hasura/graphql-engine/issues/1267#issuecomment-449932255), or potentially moving that logic into a separate permission service when you might prefer to have it in your application.
+
+Packages that provide you with a great out of the box experience (and there is no doubt that Hasura provides you with this) typically do so at the cost of removing certain freedoms.  This is why Spawn tries to give you that great out of the box experience, but make it easy for you to step in at any point and take over.  It's just plain old code, auto-generated, or imported as libraries, and can be used or discarded as needed.

@@ -1,0 +1,40 @@
+---
+name: Concepts
+---
+
+Spawn is a collection of tools for building a GraphQL API witha PostgreSQL database.
+
+It's designed around these principles:
+
+* Automatically generate code where possible.
+* Provide generic implementation for common tasks.
+* Allow overriding parts where needed -- e.g., having an automatically generated 'GetUser' function but allowing that to be replaced with a custom one where possible, or not using Open Policy Agent for authorisation.
+* Database choice matters, so let us access it when needed
+* Application should not access database directly: keep communication between application and database in a separate package (/loader)
+
+# Tools
+
+Spawn makes use of:
+
+* Gnorm for generating functions relating to database interaction
+* gqlgen for the GraphQL server
+* Open Policy Agent for policy checks
+
+# Structure
+
+* /gnorm: Contains generated database related files.  These files are written over, and anything that should persist should be placed in /static instead
+* /graph: Generated GraphQL related files
+* /loader: Your layer between application and database.  Your application should not know about the database, and this is that abstraction layer in which you talk with the database directly
+* /migrations: Database SQL statements
+* /models: Application models used by GraphQL (NOT the database)
+* /resolvers: GraphQL resolvers for queries and mutations
+* /static: Files used by Gnorm that should survive regeneration
+* /templates: Some templates used in code generation
+
+# Database
+
+Spawn embraces the view that the database is not an inconsequential choice, and should not be abstracted away until it is indistinguishable from other databases.  Developers and companies choose particular databases because of their virtues, and often those virtues cannot be fully realised if they are abstracted away through a generic interface that's interchangeable with other databases.
+
+These concerns apply to ORM's in general.  This project will auto-generate some functions that allow you to retrieve and insert data into the database, playing some of the role that an ORM would play, but they cover only basic CRUD type operations.  These are optional helper functions that you can choose to generate or override yourself.  Anything more complicated, and you will be writing it yourself, particularly when there is a deeper mismatch between your database model and your application model.
+
+Quite apart from concerns about abstracting away the choice of database, there is another important consideration that may give us reason to pause before abstracting away everything: a database's way of storing and representing data is not the same as our program's.  This is almost inevitable for all but the simplest applications, and we should not limit ourselves by requiring that the database's view of the world match the application's.  Instead, we have a database interface (provided by Gnorm), our GraphQL interface (the GraphQL API server itself with its resolvers and mutations and so forth), and a translation between the two (the loader package).
