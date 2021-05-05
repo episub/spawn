@@ -545,7 +545,7 @@ import (
 	"{{.Config.PackageName}}/loader"
 	"{{.Config.PackageName}}/models"
 	"{{.Config.PackageName}}/gnorm/dbl"
-	"github.com/episub/spawn/opa"
+	"github.com/episub/spawn/v2/opa"
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -603,8 +603,8 @@ import (
 	"{{.Config.PackageName}}/loader"
 	"{{.Config.PackageName}}/gnorm"
 	"{{.Config.PackageName}}/gnorm/dbl"
-	"github.com/episub/spawn/validate"
-	"github.com/episub/spawn/opa"
+	"github.com/episub/spawn/v2/validate"
+	"github.com/episub/spawn/v2/opa"
 	opentracing "github.com/opentracing/opentracing-go"
 )
 

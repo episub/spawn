@@ -25,7 +25,7 @@ go mod init github.com/example/todo
 Now we're ready to generate our project (optionally specify --folder={folder}):
 
 ```
-go run github.com/episub/spawn init
+go run github.com/episub/spawn/v2 init
 ```
 
 Your base project is now ready, including a sample SQL file for PostgreSQL in the migrations folder, and a schema for GraphQL in schema.graphql.  Let's use the base project.  The key to the Episub stack is auto generated code.  When changes are made to key files, we must re-generate our code.
@@ -39,7 +39,7 @@ docker-compose up -d
 Once the database has booted up, we are ready to generate our code:
 
 ```
-go run github.com/episub/spawn generate
+go run github.com/episub/spawn/v2 generate
 ```
 
 This gives us the GraphQL code.  We have one final task: filling out the resolvers code in `resolvers/resolver.go` to tell our server what to return when someone requests all the todos (we'll leave the others for now):
@@ -235,7 +235,7 @@ func (r *queryResolver) Todos(ctx context.Context) ([]dbl.Todo, error) {
 Finally, we re-run the generated and then run the server.  We pass in configuration values as environment variables so that it's easier to set for docker based production deployments:
 
 ```
-go run github.com/episub/spawn generate
+go run github.com/episub/spawn/v2 generate
 DB_USER=spawn DB_PASS=spawn go run server.go
 ```
 
@@ -386,7 +386,7 @@ func (r *queryResolver) TodosConnection(
 Re-generate the code based on these changes:
 
 ```
-go run github.com/episub/spawn generate
+go run github.com/episub/spawn/v2 generate
 ```
 
 And launch the server:

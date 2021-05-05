@@ -1,25 +1,25 @@
 package middleware
 
 import (
-	"context"
-	"errors"
-	"fmt"
-	"reflect"
-	"strings"
-	"unicode"
-	"unicode/utf8"
+  "context"
+  "errors"
+  "fmt"
+  "reflect"
+  "strings"
+  "unicode"
+  "unicode/utf8"
 
-	"github.com/99designs/gqlgen/graphql"
-	"github.com/episub/spawn/opa"
-	"github.com/episub/spawn/store"
-	"github.com/episub/spawn/vars"
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/opentracing/opentracing-go/ext"
-	otlog "github.com/opentracing/opentracing-go/log"
-	"github.com/sirupsen/logrus"
-	"github.com/vektah/gqlparser/gqlerror"
-	"github.com/vektah/gqlparser/v2/ast"
-	reflections "gopkg.in/oleiade/reflections.v1"
+  "github.com/99designs/gqlgen/graphql"
+  "github.com/episub/spawn/v2/opa"
+  "github.com/episub/spawn/v2/store"
+  "github.com/episub/spawn/v2/vars"
+  "github.com/opentracing/opentracing-go"
+  "github.com/opentracing/opentracing-go/ext"
+  otlog "github.com/opentracing/opentracing-go/log"
+  "github.com/sirupsen/logrus"
+  "github.com/vektah/gqlparser/v2/ast"
+  "github.com/vektah/gqlparser/v2/gqlerror"
+  "gopkg.in/oleiade/reflections.v1"
 )
 
 // DefaultPayloadFunc Called to fetch default payload

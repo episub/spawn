@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/episub/spawn/cmd"
+	"github.com/episub/spawn/v2/cmd"
 )
 
 func main() {

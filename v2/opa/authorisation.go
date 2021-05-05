@@ -9,7 +9,7 @@ import (
 	"reflect"
 
 	"github.com/99designs/gqlgen/graphql"
-	"github.com/episub/spawn/store"
+	"github.com/episub/spawn/v2/store"
 	prettyjson "github.com/hokaccha/go-prettyjson"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/rego"

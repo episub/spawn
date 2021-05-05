@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/episub/spawn/static"
-	"github.com/episub/spawn/store"
-	"github.com/episub/spawn/validate"
-	"github.com/episub/spawn/vars"
+	"github.com/episub/spawn/v2/static"
+	"github.com/episub/spawn/v2/store"
+	"github.com/episub/spawn/v2/validate"
+	"github.com/episub/spawn/v2/vars"
 	opentracing "github.com/opentracing/opentracing-go"
 )
 

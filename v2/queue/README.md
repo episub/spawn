@@ -14,7 +14,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/episub/spawn/queue"
+	"github.com/episub/spawn/v2/queue"
 )
 
 // Use a scheduled action to run tasks at intervals

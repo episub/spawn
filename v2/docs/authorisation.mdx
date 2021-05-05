@@ -22,7 +22,7 @@ We need to load our policies.  In server.go, in your init area:
 
 ```
 import (
-	sopa "github.com/episub/spawn/opa"
+	sopa "github.com/episub/spawn/v2/opa"
 	...
 )
 
@@ -74,7 +74,7 @@ We then configure the router to use these functions and to perform policy checks
 ```
 import (
 	...
-	spawn "github.com/episub/spawn/middleware"
+	spawn "github.com/episub/spawn/v2/middleware"
 	...
 )
 
@@ -96,7 +96,7 @@ DataMW adds a thread safe data store to the context that's used to help with pol
 ```
 import (
 	...
-	sopa "github.com/episub/spawn/opa"
+	sopa "github.com/episub/spawn/v2/opa"
 	...
 )
 

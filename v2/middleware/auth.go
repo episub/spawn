@@ -8,11 +8,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/episub/spawn/store"
-	"github.com/episub/spawn/vars"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/episub/spawn/v2/store"
+	"github.com/episub/spawn/v2/vars"
+	"github.com/opentracing/opentracing-go"
 	"github.com/sirupsen/logrus"
-	"github.com/vektah/gqlparser/gqlerror"
+	"github.com/vektah/gqlparser/v2/gqlerror"
 )
 
 var log = logrus.New()
