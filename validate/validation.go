@@ -178,6 +178,16 @@ func AfterNow(ctx context.Context, field string, v civil.Date) bool {
 	return After(ctx, field, v, now)
 }
 
+// Before Checks that a date value is before given date value to be compared with
+func Before(ctx context.Context, field string, v civil.Date, dateToCompareWith civil.Date, fieldDescription string) bool {
+	if !v.Before(dateToCompareWith) {
+		AddError(ctx, field, fieldDescription+" should be before "+dateToCompareWith.String())
+		return false
+	}
+
+	return true
+}
+
 // DOB Checks that a date value is before 18 years from now
 func DOB(ctx context.Context, field string, v civil.Date) bool {
 	now := time.Now()
