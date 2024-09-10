@@ -28,23 +28,24 @@ require (
 	github.com/mattn/go-isatty v0.0.8 // indirect
 	github.com/mna/pigeon v0.0.0-20180808201053-bb0192cfc2ae // indirect
 	github.com/nbutton23/zxcvbn-go v0.0.0-20180912185939-ae427f1e4c1d
-	github.com/open-policy-agent/opa v0.42.0
+	github.com/open-policy-agent/opa v0.44.0
 	github.com/opentracing-contrib/go-stdlib v0.0.0-20190324214902-3020fec0e66b
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/openzipkin/zipkin-go v0.1.6 // indirect
 	github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4 // indirect
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus/client_golang v1.12.2
+	github.com/prometheus/client_golang v1.13.0
 	github.com/radovskyb/watcher v1.0.6
 	github.com/rakyll/statik v0.1.6 // indirect
 	github.com/satori/go.uuid v1.2.0 // indirect
 	github.com/shopspring/decimal v0.0.0-20180709203117-cd690d0c9e24 // indirect
-	github.com/sirupsen/logrus v1.8.1
+	github.com/sirupsen/logrus v1.9.0
 	github.com/uber-go/atomic v1.4.0 // indirect
 	github.com/uber/jaeger-client-go v2.16.0+incompatible
 	github.com/uber/jaeger-lib v2.0.0+incompatible // indirect
 	github.com/urfave/cli v1.22.2
 	github.com/vektah/gqlparser v1.1.2
+	github.com/vektah/gqlparser/v2 v2.4.5 // indirect
 	gnorm.org/gnorm v1.0.0
 	golang.org/x/build v0.0.0-20190314133821-5284462c4bec // indirect
 	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e
